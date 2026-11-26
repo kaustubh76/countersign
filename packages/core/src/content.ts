@@ -120,7 +120,7 @@ export async function fetchGithubSkill(uri: string, fetchImpl: typeof fetch = fe
   const ref = parseGithubTreeUrl(uri);
   if (!ref) throw new ContentFetchError(`unsupported contentURI (need a GitHub tree URL pinned to a commit): ${uri}`);
   const url = `https://codeload.github.com/${ref.owner}/${ref.repo}/tar.gz/${ref.commit}`;
-  const res = await fetchImpl(url, { redirect: "follow" });
+  const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new ContentFetchError(`GET ${url} → ${res.status}`);
   const gz = new Uint8Array(await res.arrayBuffer());
   if (gz.length > 50 * 1024 * 1024) throw new ContentFetchError("repository tarball larger than 50 MB");

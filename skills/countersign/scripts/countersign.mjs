@@ -2269,12 +2269,12 @@ var init_address = __esm({
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/address/getAddress.js
 function checksumAddress(address_, chainId) {
-  const lower = address_.toLowerCase();
-  const cacheKey2 = `${lower}.${chainId}`;
+  const lower2 = address_.toLowerCase();
+  const cacheKey2 = `${lower2}.${chainId}`;
   const cached = checksumAddressCache.get(cacheKey2);
   if (cached)
     return cached;
-  const hexAddress = chainId ? `${chainId}${lower}` : lower.substring(2);
+  const hexAddress = chainId ? `${chainId}${lower2}` : lower2.substring(2);
   const hash3 = keccak256(stringToBytes(hexAddress), "bytes");
   const address = (chainId ? hexAddress.substring(`${chainId}0x`.length) : hexAddress).split("");
   for (let i = 0; i < 40; i += 2) {
@@ -7178,8 +7178,8 @@ function getEncodable(bytes) {
     return getEncodableList(bytes.map((x) => getEncodable(x)));
   return getEncodableBytes(bytes);
 }
-function getEncodableList(list) {
-  const bodyLength = list.reduce((acc, x) => acc + x.length, 0);
+function getEncodableList(list2) {
+  const bodyLength = list2.reduce((acc, x) => acc + x.length, 0);
   const sizeOfBodyLength = getSizeOfLength(bodyLength);
   const length = (() => {
     if (bodyLength <= 55)
@@ -7202,7 +7202,7 @@ function getEncodableList(list) {
         else
           cursor.pushUint32(bodyLength);
       }
-      for (const { encode: encode5 } of list) {
+      for (const { encode: encode5 } of list2) {
         encode5(cursor);
       }
     }
@@ -9314,9 +9314,9 @@ function parseEventLogs(parameters) {
     plans.push(plan);
     if (abiItem.anonymous)
       continue;
-    const list = bySelector.get(plan.topic);
-    if (list)
-      list.push(plan);
+    const list2 = bySelector.get(plan.topic);
+    if (list2)
+      list2.push(plan);
     else
       bySelector.set(plan.topic, [plan]);
   }
@@ -11071,13 +11071,13 @@ var init_getCallError = __esm({
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/promise/withResolvers.js
 function withResolvers() {
-  let resolve = () => void 0;
+  let resolve2 = () => void 0;
   let reject = () => void 0;
   const promise = new Promise((resolve_, reject_) => {
-    resolve = resolve_;
+    resolve2 = resolve_;
     reject = reject_;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve: resolve2, reject };
 }
 var init_withResolvers = __esm({
   "../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/promise/withResolvers.js"() {
@@ -11092,12 +11092,12 @@ function createBatchScheduler({ fn, getSize = () => 1, id, shouldSplitBatch, wai
     const args = scheduler.map(({ args: args2 }) => args2);
     if (args.length === 0)
       return;
-    new Promise((resolve) => resolve(fn(args))).then((data) => {
+    new Promise((resolve2) => resolve2(fn(args))).then((data) => {
       if (sort && Array.isArray(data))
         data.sort(sort);
       for (let i = 0; i < scheduler.length; i++) {
-        const { resolve } = scheduler[i];
-        resolve?.([data[i], data]);
+        const { resolve: resolve2 } = scheduler[i];
+        resolve2?.([data[i], data]);
       }
     }).catch((err) => {
       for (let i = 0; i < scheduler.length; i++) {
@@ -11114,18 +11114,18 @@ function createBatchScheduler({ fn, getSize = () => 1, id, shouldSplitBatch, wai
   return {
     flush,
     async schedule(args) {
-      const { promise, resolve, reject } = withResolvers();
+      const { promise, resolve: resolve2, reject } = withResolvers();
       const size5 = getSize(args);
       const queued = schedulerCache.get(id);
       if (queued && shouldSplitBatch?.(queued.size + size5))
         exec();
       const scheduler = schedulerCache.get(id);
       if (scheduler) {
-        scheduler.items.push({ args, resolve, reject });
+        scheduler.items.push({ args, resolve: resolve2, reject });
         scheduler.size += size5;
         return promise;
       }
-      schedulerCache.set(id, { items: [{ args, resolve, reject }], size: size5 });
+      schedulerCache.set(id, { items: [{ args, resolve: resolve2, reject }], size: size5 });
       timerCache.set(id, setTimeout(exec, wait2));
       return promise;
     }
@@ -11296,7 +11296,7 @@ function createCcipReadBudget() {
     queries: ccipReadLimit.queries,
     async run(fn) {
       if (active >= ccipReadLimit.concurrency)
-        await new Promise((resolve) => queue.push(resolve));
+        await new Promise((resolve2) => queue.push(resolve2));
       else
         active++;
       try {
@@ -11477,7 +11477,7 @@ var init_http = __esm({
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/promise/withTimeout.js
 function withTimeout(fn, { errorInstance = new Error("timed out"), timeout, signal }) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     ;
     (async () => {
       let timeoutId;
@@ -11492,7 +11492,7 @@ function withTimeout(fn, { errorInstance = new Error("timed out"), timeout, sign
             }
           }, timeout);
         }
-        resolve(await fn({ signal: controller?.signal || null }));
+        resolve2(await fn({ signal: controller?.signal || null }));
       } catch (err) {
         if (controller?.signal.aborted && isAbortError(err)) {
           reject(errorInstance);
@@ -12218,7 +12218,7 @@ var init_observe = __esm({
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/wait.js
 async function wait(time, { signal } = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     if (signal?.aborted) {
       reject(getAbortError(signal));
       return;
@@ -12226,7 +12226,7 @@ async function wait(time, { signal } = {}) {
     const cleanup = () => signal?.removeEventListener("abort", onAbort);
     const timeout = setTimeout(() => {
       cleanup();
-      resolve();
+      resolve2();
     }, Math.min(time, 2 ** 31 - 1));
     const onAbort = () => {
       clearTimeout(timeout);
@@ -12632,7 +12632,7 @@ var init_sendRawTransaction = __esm({
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/promise/withRetry.js
 function withRetry(fn, { delay: delay_ = 100, retryCount = 2, shouldRetry: shouldRetry2 = () => true, signal } = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     const onAbort = () => reject(getAbortError(signal));
     signal?.addEventListener("abort", onAbort, { once: true });
     const attemptRetry = async ({ count = 0 } = {}) => {
@@ -12654,7 +12654,7 @@ function withRetry(fn, { delay: delay_ = 100, retryCount = 2, shouldRetry: shoul
       };
       try {
         const data = await fn();
-        resolve(data);
+        resolve2(data);
       } catch (err) {
         if (signal?.aborted) {
           reject(getAbortError(signal));
@@ -14911,8 +14911,8 @@ function getEncodable2(bytes) {
     return getEncodableList2(bytes.map((x) => getEncodable2(x)));
   return getEncodableBytes2(bytes);
 }
-function getEncodableList2(list) {
-  const bodyLength = list.reduce((acc, x) => acc + x.length, 0);
+function getEncodableList2(list2) {
+  const bodyLength = list2.reduce((acc, x) => acc + x.length, 0);
   const sizeOfBodyLength = getSizeOfLength2(bodyLength);
   const length = (() => {
     if (bodyLength <= 55)
@@ -14935,7 +14935,7 @@ function getEncodableList2(list) {
         else
           cursor.pushUint32(bodyLength);
       }
-      for (const { encode: encode5 } of list) {
+      for (const { encode: encode5 } of list2) {
         encode5(cursor);
       }
     }
@@ -16148,7 +16148,7 @@ async function waitForTransactionReceipt(client, parameters) {
   let _unobserve;
   let _unwatch;
   let timedOut2 = false;
-  const { promise, resolve, reject } = withResolvers();
+  const { promise, resolve: resolve2, reject } = withResolvers();
   const timer = timeout ? setTimeout(() => {
     timedOut2 = true;
     _unobserve?.();
@@ -16165,7 +16165,7 @@ async function waitForTransactionReceipt(client, parameters) {
     reject(getAbortError(signal));
   };
   signal?.addEventListener("abort", onAbort, { once: true });
-  _unobserve = observe(observerId, { onReplaced, resolve, reject }, async (emit) => {
+  _unobserve = observe(observerId, { onReplaced, resolve: resolve2, reject }, async (emit) => {
     receipt = await getAction(client, getTransactionReceipt, "getTransactionReceipt")({ hash: hash3 }).catch(() => void 0);
     if (signal?.aborted)
       return;
@@ -16536,6 +16536,10 @@ function flag(args, name) {
 function bool(args, name) {
   return args.flags.has(name) && args.flags.get(name) !== "false";
 }
+function list(args, name) {
+  const v = flag(args, name);
+  return v ? v.split(",").map((s) => s.trim()).filter(Boolean) : [];
+}
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/clients/createClient.js
 init_parseAccount();
@@ -16709,14 +16713,14 @@ init_keccak256();
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/ens/encodedLabelToLabelhash.js
 init_isHex();
-function encodedLabelToLabelhash(label) {
-  if (label.length !== 66)
+function encodedLabelToLabelhash(label2) {
+  if (label2.length !== 66)
     return null;
-  if (label.indexOf("[") !== 0)
+  if (label2.indexOf("[") !== 0)
     return null;
-  if (label.indexOf("]") !== 65)
+  if (label2.indexOf("]") !== 65)
     return null;
-  const hash3 = `0x${label.slice(1, 65)}`;
+  const hash3 = `0x${label2.slice(1, 65)}`;
   if (!isHex(hash3))
     return null;
   return hash3;
@@ -16748,11 +16752,11 @@ function encodeLabelhash(hash3) {
 init_toBytes();
 init_toHex();
 init_keccak256();
-function labelhash(label) {
+function labelhash(label2) {
   const result = new Uint8Array(32).fill(0);
-  if (!label)
+  if (!label2)
     return bytesToHex(result);
-  return encodedLabelToLabelhash(label) || keccak256(stringToBytes(label));
+  return encodedLabelToLabelhash(label2) || keccak256(stringToBytes(label2));
 }
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/utils/ens/packetToBytes.js
@@ -16762,11 +16766,11 @@ function packetToBytes(packet) {
     return new Uint8Array(1);
   const bytes = new Uint8Array(stringToBytes(value).byteLength + 2);
   let offset = 0;
-  const list = value.split(".");
-  for (let i = 0; i < list.length; i++) {
-    let encoded = stringToBytes(list[i]);
+  const list2 = value.split(".");
+  for (let i = 0; i < list2.length; i++) {
+    let encoded = stringToBytes(list2[i]);
     if (encoded.byteLength > 255)
-      encoded = stringToBytes(encodeLabelhash(labelhash(list[i])));
+      encoded = stringToBytes(encodeLabelhash(labelhash(list2[i])));
     bytes[offset] = encoded.length;
     bytes.set(encoded, offset + 1);
     offset += encoded.length + 1;
@@ -16931,13 +16935,13 @@ async function isImageUri(uri, { timeout = fetchTimeout } = {}) {
     }
     if (!Object.hasOwn(globalThis, "Image"))
       return false;
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const img = new Image();
       img.onload = () => {
-        resolve(true);
+        resolve2(true);
       };
       img.onerror = () => {
-        resolve(false);
+        resolve2(false);
       };
       img.src = uri;
     });
@@ -19679,12 +19683,14 @@ function http(url, config = {}) {
 
 // ../../node_modules/.pnpm/viem@2.58.6_typescript@5.9.3/node_modules/viem/_esm/index.js
 init_address2();
+init_decodeFunctionData();
 init_encodeAbiParameters();
 init_encodeFunctionData();
 init_getAddress();
 init_isAddress();
 init_isAddressEqual();
 init_concat();
+init_fromHex();
 init_toBytes();
 init_keccak256();
 init_toFunctionSelector();
@@ -20939,6 +20945,577 @@ var skillRegistryAbi = [
     "inputs": []
   }
 ];
+var countersignAbi = [
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "agentId",
+        "type": "address",
+        "internalType": "contract IAgentID"
+      },
+      {
+        "name": "registry",
+        "type": "address",
+        "internalType": "contract ISkillRegistry"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "AGENT_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IAgentID"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "KIND_COUNTERSIGN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "KIND_REPORT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PAGE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_TX_HASHES",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "REGISTRY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ISkillRegistry"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "countersign",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "sessionTxs",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "recordId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "countersignCount",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "countersignsOf",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "tuple[]",
+        "internalType": "struct Countersign.Record[]",
+        "components": [
+          {
+            "name": "versionId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "agentId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "signer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "blockNumber",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "txHashes",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getRecord",
+    "inputs": [
+      {
+        "name": "recordId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct Countersign.Record",
+        "components": [
+          {
+            "name": "versionId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "agentId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "signer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "blockNumber",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "txHashes",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "recordCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "recordsPage",
+    "inputs": [
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "tuple[]",
+        "internalType": "struct Countersign.Record[]",
+        "components": [
+          {
+            "name": "versionId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "agentId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "signer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "blockNumber",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "txHashes",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "report",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "evidenceTxs",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "recordId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "reportCount",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "reportsOf",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "tuple[]",
+        "internalType": "struct Countersign.Record[]",
+        "components": [
+          {
+            "name": "versionId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "agentId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "signer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "blockNumber",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "txHashes",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "uniqueAgents",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Countersigned",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "recordId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Reported",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "recordId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AlreadyCountersigned",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "AlreadyReported",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadTxCount",
+    "inputs": [
+      {
+        "name": "count",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "DuplicateTxHash",
+    "inputs": [
+      {
+        "name": "txHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotAContract",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotAgentIdHolder",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SelfCountersign",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TxAlreadyUsed",
+    "inputs": [
+      {
+        "name": "txHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "UnknownVersion",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ZeroTxHash",
+    "inputs": []
+  }
+];
 var agentIdAbi = [
   {
     "type": "function",
@@ -20986,10 +21563,13 @@ var AGENT_ID_BSC = "0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F";
 var CONTENT_HASH_DOMAIN = "countersign.skill.v1";
 var MANIFEST_SCHEMA = "countersign.manifest/v1";
 var MANIFEST_FILE = "countersign.json";
+var RULESET_VERSION = "countersign.ruleset/v1";
 var FLAG_ANCHOR = 1;
 var FLAG_PULL = 2;
 var FLOW_APPROVE = 0;
 var FLOW_TRANSFER = 1;
+var KIND_COUNTERSIGN = 1;
+var KIND_REPORT = 2;
 var LIMITS = {
   targets: 16,
   permissions: 64,
@@ -21000,9 +21580,27 @@ var LIMITS = {
 };
 var MAX_UINT96 = 2n ** 96n - 1n;
 var MAX_UINT256 = 2n ** 256n - 1n;
+var SESSION_WINDOW_BLOCKS = 384000n;
 var BUILTIN_ACTIONS = ["market-order", "limit-order", "send", "prediction", "defi", "x402"];
 
 // ../core/src/calldata.ts
+var TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+function checkTxHashes(hashes) {
+  if (hashes.length < 1 || hashes.length > LIMITS.txHashes) {
+    throw new Error(`cite between 1 and ${LIMITS.txHashes} transactions (got ${hashes.length})`);
+  }
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const h of hashes) {
+    if (!TX_HASH_RE.test(h)) throw new Error(`not a transaction hash: ${h}`);
+    const lower2 = h.toLowerCase();
+    if (/^0x0{64}$/.test(lower2)) throw new Error("zero transaction hash");
+    if (seen.has(lower2)) throw new Error(`duplicate transaction hash: ${h}`);
+    seen.add(lower2);
+    out.push(lower2);
+  }
+  return out;
+}
 function encodeRegister(contentHash, contentURI, manifest) {
   const uriBytes = new TextEncoder().encode(contentURI).length;
   if (uriBytes === 0 || uriBytes > LIMITS.uriBytes) throw new Error(`contentURI must be 1–${LIMITS.uriBytes} bytes`);
@@ -21014,6 +21612,12 @@ function encodeRegister(contentHash, contentURI, manifest) {
 }
 function encodeEndorseAnchor(versionId, targetIndex) {
   return encodeFunctionData({ abi: skillRegistryAbi, functionName: "endorseAnchor", args: [versionId, targetIndex] });
+}
+function encodeCountersign(versionId, sessionTxs) {
+  return encodeFunctionData({ abi: countersignAbi, functionName: "countersign", args: [versionId, checkTxHashes(sessionTxs)] });
+}
+function encodeReport(versionId, evidenceTxs) {
+  return encodeFunctionData({ abi: countersignAbi, functionName: "report", args: [versionId, checkTxHashes(evidenceTxs)] });
 }
 
 // ../core/src/deployments.ts
@@ -21237,8 +21841,8 @@ var BSC_PUBLIC_RPCS = [
   "https://bsc.drpc.org"
 ];
 function rpcUrlsFromEnv(env = process.env) {
-  const list = env.COUNTERSIGN_RPC_URLS ?? env.BSC_RPC_URL;
-  return list ? list.split(",").map((s) => s.trim()).filter(Boolean) : void 0;
+  const list2 = env.COUNTERSIGN_RPC_URLS ?? env.BSC_RPC_URL;
+  return list2 ? list2.split(",").map((s) => s.trim()).filter(Boolean) : void 0;
 }
 function createReader(opts = {}) {
   const chainId = opts.chainId ?? BSC_CHAIN_ID;
@@ -21393,10 +21997,446 @@ async function readVersion(reader, d, versionId) {
     attestation: a.blockNumber === 0n ? null : { ...a }
   };
 }
+async function readVersionIds(reader, d) {
+  const c = reader.client;
+  const count = await c.readContract({ address: d.skillRegistry, abi: skillRegistryAbi, functionName: "versionCount" });
+  const ids = [];
+  for (let offset = 0n; offset < count; offset += BigInt(LIMITS.page)) {
+    const page = await c.readContract({
+      address: d.skillRegistry,
+      abi: skillRegistryAbi,
+      functionName: "versionsPage",
+      args: [offset, BigInt(LIMITS.page)]
+    });
+    ids.push(...page);
+  }
+  return ids;
+}
+async function readVersionsByContent(reader, d, contentHash) {
+  const ids = [];
+  let total = 1n;
+  for (let offset = 0n; offset < total; offset += BigInt(LIMITS.page)) {
+    const [page, t] = await reader.client.readContract({
+      address: d.skillRegistry,
+      abi: skillRegistryAbi,
+      functionName: "versionsByContent",
+      args: [contentHash, offset, BigInt(LIMITS.page)]
+    });
+    total = t;
+    ids.push(...page);
+  }
+  return ids;
+}
+async function readRecords(reader, d, versionId, kind = KIND_COUNTERSIGN) {
+  const fn = kind === KIND_COUNTERSIGN ? "countersignsOf" : "reportsOf";
+  const out = [];
+  let total = 1n;
+  for (let offset = 0n; offset < total; offset += BigInt(LIMITS.page)) {
+    const [page, t] = await reader.client.readContract({
+      address: d.countersign,
+      abi: countersignAbi,
+      functionName: fn,
+      args: [versionId, offset, BigInt(LIMITS.page)]
+    });
+    total = t;
+    for (const r of page) out.push({ ...r, txHashes: [...r.txHashes] });
+  }
+  return out;
+}
 async function readAgentId(reader, agentIdAddress, account) {
   const handle = await reader.client.readContract({ address: agentIdAddress, abi: agentIdAbi, functionName: "handleOf", args: [account] });
   if (!handle) return null;
   return { handle, agentId: BigInt(keccak256(toBytes(handle))) };
+}
+
+// ../core/src/content.ts
+import { gunzipSync } from "node:zlib";
+var TREE_RE = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/tree\/([0-9a-fA-F]{7,40})(?:\/(.*?))?\/?$/;
+function parseGithubTreeUrl(uri) {
+  const m = TREE_RE.exec(uri.trim());
+  if (!m) return null;
+  return { owner: m[1], repo: m[2], commit: m[3], path: decodeURIComponent(m[4] ?? "") };
+}
+function cString(buf, start, length) {
+  let end = start;
+  while (end < start + length && buf[end] !== 0) end++;
+  return new TextDecoder().decode(buf.subarray(start, end));
+}
+function parseOctal(buf, start, length) {
+  const s = cString(buf, start, length).trim();
+  return s ? Number.parseInt(s, 8) : 0;
+}
+function parsePax(data) {
+  const out = {};
+  const text = new TextDecoder().decode(data);
+  let i = 0;
+  while (i < text.length) {
+    const space = text.indexOf(" ", i);
+    if (space === -1) break;
+    const len = Number.parseInt(text.slice(i, space), 10);
+    if (!Number.isFinite(len) || len <= 0) break;
+    const record = text.slice(space + 1, i + len - 1);
+    const eq = record.indexOf("=");
+    if (eq !== -1) out[record.slice(0, eq)] = record.slice(eq + 1);
+    i += len;
+  }
+  return out;
+}
+function readTar(tar) {
+  const entries = [];
+  let offset = 0;
+  let paxPath;
+  while (offset + 512 <= tar.length) {
+    const header = tar.subarray(offset, offset + 512);
+    if (header.every((b) => b === 0)) break;
+    const name = cString(header, 0, 100);
+    const size5 = parseOctal(header, 124, 12);
+    const typeflag = String.fromCharCode(header[156] ?? 0);
+    const prefix = cString(header, 345, 155);
+    const dataStart = offset + 512;
+    const data = tar.subarray(dataStart, dataStart + size5);
+    offset = dataStart + Math.ceil(size5 / 512) * 512;
+    if (typeflag === "x") {
+      paxPath = parsePax(data).path;
+      continue;
+    }
+    if (typeflag === "g" || typeflag === "L" || typeflag === "K") {
+      if (typeflag === "L") paxPath = cString(data, 0, data.length);
+      continue;
+    }
+    const path = paxPath ?? (prefix ? `${prefix}/${name}` : name);
+    paxPath = void 0;
+    const type = typeflag === "0" || typeflag === "\0" || typeflag === "7" ? "file" : typeflag === "5" ? "dir" : typeflag === "2" || typeflag === "1" ? "symlink" : "other";
+    entries.push({ path, type, bytes: type === "file" ? new Uint8Array(data) : new Uint8Array() });
+  }
+  return entries;
+}
+var ContentFetchError = class extends Error {
+  name = "ContentFetchError";
+};
+function skillFilesFromTarball(gz, path) {
+  const entries = readTar(gunzipSync(gz));
+  const prefix = path ? `${path.replace(/^\/+|\/+$/g, "")}/` : "";
+  const files = [];
+  for (const e of entries) {
+    const rel = e.path.split("/").slice(1).join("/");
+    if (!rel.startsWith(prefix) || rel === prefix) continue;
+    const inner = rel.slice(prefix.length);
+    if (!inner) continue;
+    if (e.type === "symlink") throw new ContentFetchError(`symlink inside the skill: ${inner}`);
+    if (e.type === "file") files.push({ path: inner, bytes: e.bytes });
+  }
+  if (files.length === 0) throw new ContentFetchError(`no files under "${path}" in the tarball`);
+  return files;
+}
+async function fetchGithubSkill(uri, fetchImpl = fetch) {
+  const ref = parseGithubTreeUrl(uri);
+  if (!ref) throw new ContentFetchError(`unsupported contentURI (need a GitHub tree URL pinned to a commit): ${uri}`);
+  const url = `https://codeload.github.com/${ref.owner}/${ref.repo}/tar.gz/${ref.commit}`;
+  const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(2e4) });
+  if (!res.ok) throw new ContentFetchError(`GET ${url} → ${res.status}`);
+  const gz = new Uint8Array(await res.arrayBuffer());
+  if (gz.length > 50 * 1024 * 1024) throw new ContentFetchError("repository tarball larger than 50 MB");
+  return skillFilesFromTarball(gz, ref.path);
+}
+
+// ../core/src/verifier.ts
+var TOPIC_TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+var TOPIC_APPROVAL = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925";
+var TOPIC_APPROVAL_FOR_ALL = "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31";
+var EIP1967_IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+var SEL_TRANSFER = "0xa9059cbb";
+var SEL_TRANSFER_FROM = "0x23b872dd";
+var EMPTY_SELECTOR = "0x00000000";
+var lower = (a) => a.toLowerCase();
+var topicAddress = (topic) => topic && topic.length === 66 ? getAddress(`0x${topic.slice(26)}`) : null;
+function selectorOf2(input) {
+  return input.length >= 10 ? input.slice(0, 10).toLowerCase() : EMPTY_SELECTOR;
+}
+function authorSet(v) {
+  const s = /* @__PURE__ */ new Set([lower(v.registrant)]);
+  for (const t of v.targets) if (t.endorser !== zeroAddress) s.add(lower(t.endorser));
+  return s;
+}
+function checkEffects(v, tx, receipt, signer) {
+  const reasons = [];
+  const flows = v.flows;
+  const selector = selectorOf2(tx.input);
+  const directTransfer = selector === SEL_TRANSFER || selector === SEL_TRANSFER_FROM;
+  for (const log of receipt.logs) {
+    const t0 = log.topics[0];
+    if (t0 === TOPIC_APPROVAL) {
+      const owner = topicAddress(log.topics[1]);
+      const spender = topicAddress(log.topics[2]);
+      if (!owner || !spender || !isAddressEqual(owner, signer)) continue;
+      const flow = flows.find((f) => f.kind === FLOW_APPROVE && isAddressEqual(f.token, log.address) && isAddressEqual(f.counterparty, spender));
+      if (!flow) {
+        reasons.push("approval-undeclared");
+        continue;
+      }
+      if (log.topics.length === 3 && log.data && log.data !== "0x" && hexToBigInt(log.data) > flow.cap) reasons.push("approval-over-cap");
+    } else if (t0 === TOPIC_APPROVAL_FOR_ALL) {
+      const owner = topicAddress(log.topics[1]);
+      const operator = topicAddress(log.topics[2]);
+      const approved = log.data && log.data !== "0x" && hexToBigInt(log.data) !== 0n;
+      if (!owner || !operator || !approved || !isAddressEqual(owner, signer)) continue;
+      const declared = flows.some((f) => f.kind === FLOW_APPROVE && isAddressEqual(f.token, log.address) && isAddressEqual(f.counterparty, operator));
+      if (!declared) reasons.push("operator-undeclared");
+    } else if (t0 === TOPIC_TRANSFER && directTransfer && tx.to && isAddressEqual(log.address, tx.to)) {
+      const from15 = topicAddress(log.topics[1]);
+      const to = topicAddress(log.topics[2]);
+      if (!from15 || !to || !isAddressEqual(from15, signer)) continue;
+      const flow = flows.find((f) => f.kind === FLOW_TRANSFER && isAddressEqual(f.token, log.address) && isAddressEqual(f.counterparty, to));
+      if (!flow) reasons.push("transfer-undeclared-recipient");
+      else if (log.topics.length === 3 && log.data && log.data !== "0x" && hexToBigInt(log.data) > flow.cap) reasons.push("transfer-over-cap");
+    }
+  }
+  return reasons;
+}
+async function checkCitedTx(input, src, codeChanged, record, hash3, opts) {
+  const v = input.version;
+  const [tx, receipt] = await Promise.all([src.getTransaction(hash3), src.getReceipt(hash3)]);
+  if (!tx || !receipt || tx.blockNumber == null) return { ok: false, reasons: ["tx-not-found"], anchorHit: false };
+  const reasons = [];
+  if (receipt.status !== "success") reasons.push("tx-failed");
+  if (tx.chainId !== void 0 && Number(tx.chainId) !== input.chainId) reasons.push("wrong-chain");
+  if (!isAddressEqual(tx.from, record.signer)) reasons.push("not-from-signer");
+  if (tx.blockNumber <= v.registeredBlock) reasons.push("before-registration");
+  if (tx.blockNumber > record.blockNumber) reasons.push("after-record");
+  else if (opts.requireInWindow && record.blockNumber - tx.blockNumber > SESSION_WINDOW_BLOCKS) reasons.push("outside-window");
+  const index2 = tx.to ? v.targets.findIndex((t) => isAddressEqual(t.target, tx.to)) : -1;
+  const target = index2 >= 0 ? v.targets[index2] : void 0;
+  if (!target) {
+    reasons.push("undeclared-target");
+    return { ok: false, reasons, anchorHit: false };
+  }
+  const selector = selectorOf2(tx.input);
+  if (!v.permissions.some((p) => p.targetIndex === index2 && lower(p.selector) === selector)) reasons.push("undeclared-function");
+  if (tx.value > target.maxValue) reasons.push("value-over-cap");
+  if (await codeChanged(target.target)) reasons.push("target-code-changed");
+  reasons.push(...checkEffects(v, tx, receipt, record.signer));
+  const anchorHit = (target.flags & FLAG_ANCHOR) !== 0 && target.endorser !== zeroAddress;
+  return { ok: reasons.length === 0, reasons, anchorHit };
+}
+async function authorPull(input, src, record, hash3) {
+  const v = input.version;
+  const [tx, receipt] = await Promise.all([src.getTransaction(hash3), src.getReceipt(hash3)]);
+  if (!tx || !receipt || tx.blockNumber == null || receipt.status !== "success") return null;
+  if (tx.blockNumber <= v.registeredBlock || tx.blockNumber > record.blockNumber) return null;
+  if (!authorSet(v).has(lower(tx.from))) return null;
+  const pullTarget = tx.to ? v.targets.find((t) => isAddressEqual(t.target, tx.to) && (t.flags & FLAG_PULL) !== 0) : void 0;
+  for (const log of receipt.logs) {
+    const t0 = log.topics[0];
+    const party = topicAddress(log.topics[1]);
+    if (!party || !isAddressEqual(party, record.signer)) continue;
+    if (t0 === TOPIC_TRANSFER) {
+      const allowed = pullTarget && v.flows.some(
+        (f) => f.kind === FLOW_APPROVE && isAddressEqual(f.token, log.address) && isAddressEqual(f.counterparty, pullTarget.target) && (log.topics.length !== 3 || !log.data || log.data === "0x" || hexToBigInt(log.data) <= f.cap)
+      );
+      if (!allowed) return { kind: "author-pull", detail: "a transaction sent by the author moved the reporter's tokens", txHash: hash3 };
+    } else if (t0 === TOPIC_APPROVAL || t0 === TOPIC_APPROVAL_FOR_ALL) {
+      return { kind: "author-pull", detail: "a transaction sent by the author created an approval over the reporter's tokens", txHash: hash3 };
+    }
+  }
+  return null;
+}
+async function verifyVersionData(input, src) {
+  const v = input.version;
+  const codeCache = /* @__PURE__ */ new Map();
+  const codeChanged = (target) => {
+    const key = lower(target);
+    let p = codeCache.get(key);
+    if (!p) {
+      const stored = v.targets.find((t) => isAddressEqual(t.target, target))?.codehash;
+      p = src.getCode(target).then((code) => code === void 0 ? false : keccak256(code === "0x" ? "0x" : code) !== stored);
+      codeCache.set(key, p);
+    }
+    return p;
+  };
+  let canonical = "skipped";
+  const canonicalDetail = [];
+  if (input.content === null) {
+    canonical = "unavailable";
+    canonicalDetail.push(input.contentError ?? "content could not be fetched from contentURI");
+  } else if (input.content) {
+    try {
+      const { contentHash } = hashSkillFiles(input.content);
+      const manifestFile = input.content.find((f) => f.path === MANIFEST_FILE);
+      if (contentHash !== v.contentHash) canonicalDetail.push("content at contentURI does not hash to the registered contentHash");
+      if (!manifestFile) canonicalDetail.push(`${MANIFEST_FILE} missing from the content`);
+      else {
+        const parsed = parseManifest(JSON.parse(new TextDecoder().decode(manifestFile.bytes)));
+        if (!isAddressEqual(parsed.publisher, v.registrant)) canonicalDetail.push("registrant is not the publisher named in countersign.json (not the canonical version)");
+        if (parsed.manifestHash !== v.manifestHash) canonicalDetail.push("countersign.json does not encode to the registered manifestHash");
+      }
+      canonical = canonicalDetail.length === 0 ? "verified" : "mismatch";
+    } catch (e) {
+      canonical = "mismatch";
+      canonicalDetail.push(`content is not a valid skill: ${e.message}`);
+    }
+  }
+  const incidents = [];
+  for (const t of v.targets) {
+    if (await codeChanged(t.target)) incidents.push({ kind: "drift", detail: "target code changed since registration", target: t.target });
+    if (t.impl !== zeroAddress) {
+      const slot = await src.getStorageAt(t.target, EIP1967_IMPL_SLOT);
+      const impl = slot && slot !== "0x" ? getAddress(`0x${slot.slice(-40)}`) : zeroAddress;
+      if (!isAddressEqual(impl, t.impl)) incidents.push({ kind: "drift", detail: `proxy implementation is ${impl}, not the declared ${t.impl}`, target: t.target });
+    }
+  }
+  if (input.content && input.staticCheck) {
+    const { failedRules } = input.staticCheck(input.content);
+    const harmful = failedRules.filter((r) => ["RL1", "RL2", "RL3", "RL6"].includes(r));
+    if (harmful.length) incidents.push({ kind: "static", detail: `published content fails ${harmful.join(", ")}`, rules: harmful });
+  }
+  const reporterAgents = new Set(input.reports.map((r) => r.agentId.toString()));
+  const authors = authorSet(v);
+  const registrantKey = v.registrantAgentId.toString();
+  const isPeer = (agentId) => input.graph.countersignedAuthors.has(`${registrantKey}>${agentId.toString()}`);
+  let backed = 0;
+  let authorPullReports = 0;
+  const backedAgents = /* @__PURE__ */ new Set();
+  for (const r of input.reports) {
+    let incident = null;
+    let hasValidSession = false;
+    for (const hash3 of r.txHashes) {
+      incident ??= await authorPull(input, src, r, hash3);
+      if (!hasValidSession) {
+        const check = await checkCitedTx(input, src, codeChanged, r, hash3, { requireInWindow: true });
+        hasValidSession = check.reasons.every((x) => x.startsWith("approval") || x.startsWith("operator") || x.startsWith("transfer"));
+      }
+    }
+    if (incident) {
+      authorPullReports++;
+      if (!incidents.some((i) => i.kind === incident.kind && i.txHash === incident.txHash)) incidents.push(incident);
+    } else if (hasValidSession && !authors.has(lower(r.signer)) && !isPeer(r.agentId)) {
+      backed++;
+      backedAgents.add(r.agentId.toString());
+    }
+  }
+  let counted = 0;
+  let peer = 0;
+  let rejected = 0;
+  const rejectionReasons = {};
+  for (const r of input.countersigns) {
+    const verdict = await evaluateCountersign(input, src, codeChanged, r, authors, reporterAgents, isPeer);
+    if (verdict.status === "counted") counted++;
+    else if (verdict.status === "peer") peer++;
+    else {
+      rejected++;
+      for (const reason of new Set(verdict.reasons)) rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
+    }
+  }
+  const declaredAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0).length;
+  const endorsedAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0 && t.endorser !== zeroAddress).length;
+  const corroborated = backedAgents.size >= 3;
+  const status = incidents.length > 0 ? "incident" : canonical === "mismatch" || corroborated || endorsedAnchors === 0 ? "warning" : counted === 0 ? "unproven" : "ok";
+  return {
+    ruleset: RULESET_VERSION,
+    versionId: v.versionId,
+    computedAtBlock: input.computedAtBlock ?? null,
+    canonical,
+    canonicalDetail,
+    anchors: { declared: declaredAnchors, endorsed: endorsedAnchors },
+    attestation: v.attestation ? {
+      rulesChecked: v.attestation.rulesChecked,
+      rulesPassed: v.attestation.rulesPassed,
+      revoked: v.attestation.revoked,
+      reportHash: v.attestation.reportHash,
+      checkerCommit: v.attestation.checkerCommit
+    } : null,
+    countersigns: { total: input.countersigns.length, counted, peer, rejected, rejectionReasons },
+    incidents,
+    claims: { total: input.reports.length - authorPullReports, backed, corroborated },
+    status
+  };
+}
+async function evaluateCountersign(input, src, codeChanged, r, authors, reporterAgents, isPeer) {
+  const reasons = [];
+  if (r.kind !== KIND_COUNTERSIGN) return { status: "rejected", reasons: ["not-a-countersign"] };
+  if (authors.has(lower(r.signer))) reasons.push("author-or-endorser");
+  if (reporterAgents.has(r.agentId.toString())) reasons.push("also-reported");
+  let anchorHit = false;
+  for (const hash3 of r.txHashes) {
+    const check = await checkCitedTx(input, src, codeChanged, r, hash3, { requireInWindow: true });
+    reasons.push(...check.reasons);
+    anchorHit ||= check.ok && check.anchorHit;
+  }
+  if (!anchorHit) reasons.push("no-anchor-hit");
+  if (reasons.length > 0) return { status: "rejected", reasons };
+  return isPeer(r.agentId) ? { status: "peer", reasons: ["reciprocal-author-pair"] } : { status: "counted", reasons: [] };
+}
+async function evaluateRecord(input, src, record) {
+  const v = input.version;
+  const cache = /* @__PURE__ */ new Map();
+  const codeChanged = (target) => {
+    let p = cache.get(lower(target));
+    if (!p) {
+      const stored = v.targets.find((t) => isAddressEqual(t.target, target))?.codehash;
+      p = src.getCode(target).then((code) => code === void 0 ? false : keccak256(code) !== stored);
+      cache.set(lower(target), p);
+    }
+    return p;
+  };
+  const registrantKey = v.registrantAgentId.toString();
+  return evaluateCountersign(
+    input,
+    src,
+    codeChanged,
+    record,
+    authorSet(v),
+    new Set(input.reports.map((r) => r.agentId.toString())),
+    (agentId) => input.graph.countersignedAuthors.has(`${registrantKey}>${agentId.toString()}`)
+  );
+}
+async function loadSnapshot(reader, d) {
+  const block = await reader.getBlockNumber();
+  const ids = await readVersionIds(reader, d);
+  const versions = /* @__PURE__ */ new Map();
+  const countersigns = /* @__PURE__ */ new Map();
+  const reports = /* @__PURE__ */ new Map();
+  for (const id of ids) {
+    const v = await readVersion(reader, d, id);
+    if (!v) continue;
+    versions.set(id, v);
+    countersigns.set(id, await readRecords(reader, d, id, KIND_COUNTERSIGN));
+    reports.set(id, await readRecords(reader, d, id, KIND_REPORT));
+  }
+  const graph = { countersignedAuthors: /* @__PURE__ */ new Set() };
+  for (const [id, records] of countersigns) {
+    const registrant = versions.get(id)?.registrantAgentId;
+    if (registrant === void 0) continue;
+    for (const r of records) graph.countersignedAuthors.add(`${r.agentId.toString()}>${registrant.toString()}`);
+  }
+  return { versions, countersigns, reports, graph, block };
+}
+async function verifyFromSnapshot(snap, chainId, versionId, src, opts = {}) {
+  const version4 = snap.versions.get(versionId);
+  if (!version4) return null;
+  let content;
+  let contentError;
+  if (opts.fetchContent !== false) {
+    try {
+      content = await (opts.fetchContent ?? ((uri) => fetchGithubSkill(uri)))(version4.contentURI);
+    } catch (e) {
+      content = null;
+      contentError = e.message;
+    }
+  }
+  return verifyVersionData(
+    {
+      chainId,
+      version: version4,
+      countersigns: snap.countersigns.get(versionId) ?? [],
+      reports: snap.reports.get(versionId) ?? [],
+      graph: snap.graph,
+      content,
+      contentError,
+      staticCheck: opts.staticCheck,
+      computedAtBlock: snap.block
+    },
+    src
+  );
 }
 
 // ../redline/src/rules.ts
@@ -22075,6 +23115,11 @@ async function cmdEndorse(args) {
   };
 }
 
+// src/user.ts
+import { mkdir, readFile as readFile4, rename, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join as join3, resolve } from "node:path";
+
 // src/output.ts
 var ICON = { ok: "✓", warn: "!", block: "✗", info: "·" };
 function replacer(_key, value) {
@@ -22097,6 +23142,488 @@ function print(result, json) {
   process.stdout.write(`${lines.join("\n")}
 `);
 }
+function verdictOf(reasons) {
+  if (reasons.some((r) => r.level === "block")) return "block";
+  if (reasons.some((r) => r.level === "warn")) return "warn";
+  return "allow";
+}
+
+// src/trust.ts
+function staticCheck(files) {
+  return { failedRules: checkSkill(files).results.filter((r) => !r.passed).map((r) => r.rule) };
+}
+function reviveBigints(report) {
+  return { ...report, computedAtBlock: report.computedAtBlock == null ? null : BigInt(report.computedAtBlock) };
+}
+async function versionStatus(ctx, versionId, opts = {}) {
+  if (!opts.local) {
+    try {
+      const res = await fetch(`${ctx.apiBase.replace(/\/$/, "")}/api/v1/version/${versionId}?chainId=${ctx.chainId}`, {
+        signal: AbortSignal.timeout(6e3)
+      });
+      if (res.status === 404) return { report: null, source: "api" };
+      if (res.ok) {
+        const body = await res.json();
+        if (body.report && body.report.versionId?.toLowerCase() === versionId.toLowerCase()) {
+          return { report: reviveBigints(body.report), source: "api" };
+        }
+      }
+    } catch {
+    }
+  }
+  const snap = await loadSnapshot(ctx.reader, ctx.deployment);
+  const report = await verifyFromSnapshot(snap, ctx.chainId, versionId, ctx.reader, {
+    staticCheck,
+    ...opts.noContent ? { fetchContent: false } : {}
+  });
+  return { report, source: "local" };
+}
+
+// src/user.ts
+var LINKAGE_NOTICE = "This transaction is public: it permanently links this wallet (and its Agent ID) to this skill version on BNB Smart Chain. COUNTERSIGN's site and API show counts only, never who, but anyone can read the chain.";
+var HARMFUL_RULES = /* @__PURE__ */ new Set(["RL1", "RL2", "RL3", "RL6"]);
+var TOKEN_ABI = [
+  { type: "function", name: "approve", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "increaseAllowance", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "added" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "transfer", inputs: [{ type: "address", name: "to" }, { type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "transferFrom", inputs: [{ type: "address", name: "from" }, { type: "address", name: "to" }, { type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "setApprovalForAll", inputs: [{ type: "address", name: "operator" }, { type: "bool", name: "approved" }], outputs: [], stateMutability: "nonpayable" }
+];
+function label(m, a) {
+  const l = m?.labels[a.toLowerCase()];
+  return l ? `${l} (${a})` : a;
+}
+function skillArg(args) {
+  const dir = flag(args, "skill") ?? args.positionals[1];
+  if (!dir) throw new UsageError("missing <skill-dir> (or --skill <dir>)");
+  return dir;
+}
+async function versionOf(ctx, skill) {
+  if (!skill.manifest) return { versionId: null, registered: null, publisherHasAgentId: false };
+  const agent = await readAgentId(ctx.reader, ctx.deployment.agentId, skill.manifest.publisher);
+  if (!agent) return { versionId: null, registered: null, publisherHasAgentId: false };
+  const versionId = computeVersionId(skill.content.contentHash, skill.manifest.manifestHash, agent.agentId);
+  return { versionId, registered: await readVersion(ctx.reader, ctx.deployment, versionId), publisherHasAgentId: true };
+}
+async function cmdCheckInstall(args) {
+  const ctx = await loadContext(args);
+  const skill = await loadSkill(skillArg(args), { extraKnown: [ctx.deployment.skillRegistry, ctx.deployment.countersign] });
+  const reasons = [];
+  const m = skill.manifest;
+  for (const r of skill.redline.results) {
+    for (const f of r.findings) {
+      const undeclaredWithoutManifest = !m && f.rule === "RL3" && /not declared/.test(f.message);
+      const level = f.severity === "warn" || undeclaredWithoutManifest ? "warn" : HARMFUL_RULES.has(r.rule) ? "block" : "warn";
+      reasons.push({ level, text: `${r.rule}: ${f.message} (${f.file}:${f.line}: "${f.snippet.slice(0, 80)}")` });
+    }
+  }
+  if (!skill.redline.results.some((r) => r.findings.some((f) => f.severity === "fail"))) {
+    reasons.push({ level: "ok", text: "static Red-Line Check: no findings" });
+  }
+  if (!m) {
+    reasons.push({ level: "warn", text: `${skill.manifestProblem ?? "no countersign.json"}: COUNTERSIGN cannot check this skill's wallet calls` });
+  }
+  const { versionId, registered, publisherHasAgentId } = await versionOf(ctx, skill);
+  if (m && !publisherHasAgentId) reasons.push({ level: "warn", text: `publisher ${m.publisher} holds no Agent ID, so this version cannot be registered` });
+  let summary = "";
+  if (m && versionId && !registered) {
+    reasons.push({ level: "warn", text: "this exact version is not registered: nobody has countersigned it yet" });
+    const others = await readVersionsByContent(ctx.reader, ctx.deployment, skill.content.contentHash);
+    if (others.length) reasons.push({ level: "info", text: `${others.length} non-canonical registration(s) of these files exist (not by the publisher); ignored` });
+    summary = "Not registered";
+  }
+  if (registered && versionId) {
+    reasons.push({ level: "ok", text: `registered by the publisher's Agent ID (block ${registered.registeredBlock})` });
+    const { report, source } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
+    if (registered.attestation && !registered.attestation.revoked) {
+      const all = registered.attestation.rulesPassed === registered.attestation.rulesChecked;
+      reasons.push({ level: all ? "ok" : "warn", text: all ? "Red-Line attestation: all checked rules passed" : "Red-Line attestation: some rules failed" });
+    } else {
+      reasons.push({ level: "warn", text: "no Red-Line attestation" });
+    }
+    if (report) {
+      for (const inc of report.incidents) reasons.push({ level: "block", text: `verified incident (${inc.kind}): ${inc.detail}${inc.txHash ? ` (${inc.txHash})` : ""}` });
+      const n = report.countersigns.counted;
+      reasons.push({
+        level: n > 0 ? "ok" : "warn",
+        text: `countersigned by ${n} Agent ID holder${n === 1 ? "" : "s"} whose own on-chain sessions were verified (${source === "api" ? "via the COUNTERSIGN API" : "verified locally from chain data"})`
+      });
+      if (report.countersigns.peer) reasons.push({ level: "info", text: `${report.countersigns.peer} more from reciprocal author pairs (not counted)` });
+      if (report.anchors.endorsed === 0) reasons.push({ level: "warn", text: "no endorsed anchor: no countersign can count yet" });
+      if (report.claims.total) {
+        reasons.push({
+          level: report.claims.corroborated ? "warn" : "info",
+          text: `${report.claims.total} unverified report(s)${report.claims.corroborated ? ", corroborated by 3+ independent users" : ""}`
+        });
+      }
+      if (report.canonical === "mismatch") reasons.push({ level: "warn", text: `published content check failed: ${report.canonicalDetail.join("; ")}` });
+      summary = `Registered ✓ · Countersigned by ${n} · ${report.incidents.length} verified incident${report.incidents.length === 1 ? "" : "s"}`;
+    }
+  }
+  const verdict = verdictOf(reasons);
+  return {
+    ok: true,
+    command: "check-install",
+    verdict,
+    say: verdict === "block" ? `Blocked: ${reasons.filter((r) => r.level === "block").map((r) => r.text.split(" (")[0]).slice(0, 3).join("; ")}.` : verdict === "warn" ? `Use with caution${summary ? ` (${summary})` : ""}.` : `${summary || "OK"}.`,
+    reasons,
+    data: { versionId, contentHash: skill.content.contentHash, manifestHash: m?.manifestHash ?? null }
+  };
+}
+function checkCallAgainstManifest(m, to, data, value, wallet) {
+  const reasons = [];
+  const targets = m.onchain.targets;
+  const index2 = targets.findIndex((t) => isAddressEqual(t.target, to));
+  if (index2 === -1) {
+    reasons.push({ level: "block", text: `target ${to} is not declared in countersign.json` });
+    return reasons;
+  }
+  const target = targets[index2];
+  reasons.push({ level: "ok", text: `target ${label(m, to)} is declared` });
+  const selector = (data.length >= 10 ? data.slice(0, 10) : "0x00000000").toLowerCase();
+  if (!m.onchain.permissions.some((p) => p.targetIndex === index2 && p.selector.toLowerCase() === selector)) {
+    reasons.push({ level: "block", text: `function ${selector} is not declared for this target` });
+  } else {
+    reasons.push({ level: "ok", text: `function ${selector} is declared` });
+  }
+  if (value > target.maxValue) reasons.push({ level: "block", text: `sends ${value} wei, above the declared cap of ${target.maxValue}` });
+  let decoded = null;
+  try {
+    decoded = decodeFunctionData({ abi: TOKEN_ABI, data });
+  } catch {
+    decoded = null;
+  }
+  if (decoded) {
+    const flowFor = (kind, counterparty) => m.onchain.flows.find((f) => f.kind === kind && isAddressEqual(f.token, to) && isAddressEqual(f.counterparty, counterparty));
+    const [a0, a1, a2] = decoded.args ?? [];
+    if (decoded.functionName === "approve" || decoded.functionName === "increaseAllowance") {
+      const spender = getAddress(a0);
+      const amount = a1;
+      const flow = flowFor(0, spender);
+      if (amount === MAX_UINT256) reasons.push({ level: "block", text: `approval for the maximum amount to ${spender}` });
+      if (!flow) reasons.push({ level: "block", text: `approval to undeclared spender ${spender}` });
+      else if (amount > flow.cap) reasons.push({ level: "block", text: `approval of ${amount} exceeds the declared cap ${flow.cap}` });
+      else reasons.push({ level: "ok", text: `approval to ${label(m, spender)} within the declared cap` });
+    } else if (decoded.functionName === "transfer" || decoded.functionName === "transferFrom" && wallet && isAddressEqual(getAddress(a0), wallet)) {
+      const recipient = getAddress(decoded.functionName === "transfer" ? a0 : a1);
+      const amount = decoded.functionName === "transfer" ? a1 : a2;
+      const flow = flowFor(1, recipient);
+      if (!flow) reasons.push({ level: "block", text: `token transfer to undeclared recipient ${recipient}` });
+      else if (amount > flow.cap) reasons.push({ level: "block", text: `transfer of ${amount} exceeds the declared cap ${flow.cap}` });
+      else reasons.push({ level: "ok", text: `transfer to ${label(m, recipient)} within the declared cap` });
+    } else if (decoded.functionName === "setApprovalForAll" && a1 === true) {
+      const operator = getAddress(a0);
+      if (!flowFor(0, operator)) reasons.push({ level: "block", text: `operator approval to undeclared ${operator}` });
+    }
+  }
+  return reasons;
+}
+async function cmdCheckCall(args) {
+  const skill = await loadSkill(skillArg(args));
+  const to = addressArg(flag(args, "to"), "--to");
+  const data = flag(args, "data") ?? "0x";
+  if (!/^0x([0-9a-fA-F]{2})*$/.test(data)) throw new UsageError("--data must be hex");
+  const value = BigInt(flag(args, "value") ?? "0");
+  const wallet = flag(args, "from") ? addressArg(flag(args, "from"), "--from") : null;
+  if (!skill.manifest) {
+    return {
+      ok: true,
+      command: "check-call",
+      verdict: "warn",
+      say: "This skill declares no permissions, so COUNTERSIGN cannot check this call. Show the user the full preview before confirming.",
+      reasons: [{ level: "warn", text: skill.manifestProblem ?? "no countersign.json" }]
+    };
+  }
+  const reasons = checkCallAgainstManifest(skill.manifest, to, data, value, wallet);
+  const verdict = verdictOf(reasons);
+  const chainId = Number(flag(args, "chain") ?? skill.manifest.chainId);
+  return {
+    ok: true,
+    command: "check-call",
+    verdict,
+    say: verdict === "block" ? `Blocked: this call is outside what the skill declared (${reasons.filter((r) => r.level === "block").map((r) => r.text).join("; ")}). Do not preview or execute it; tell the user.` : "Inside the skill's declared permissions. Preview it, show the user the result, and wait for an explicit yes.",
+    reasons,
+    next: verdict === "block" || !wallet ? [] : [
+      { what: "Preview (sends nothing):", run: bawPreview(chainId, wallet, to, data, value) },
+      { what: `Then check Binance's simulation: countersign check-preview --skill ${skill.dir} --preview <preview JSON>` }
+    ]
+  };
+}
+function pick(o, keys) {
+  for (const k of keys) if (o[k] !== void 0 && o[k] !== null) return o[k];
+  return void 0;
+}
+async function readPreviewArg(args) {
+  const p = flag(args, "preview");
+  if (!p) throw new UsageError("missing --preview <file | - | JSON>");
+  const text = p.trim().startsWith("{") ? p : p === "-" ? await new Promise((res) => {
+    let s = "";
+    process.stdin.on("data", (d) => s += d).on("end", () => res(s));
+  }) : await readFile4(p, "utf8");
+  return JSON.parse(text);
+}
+async function cmdCheckPreview(args) {
+  const skill = await loadSkill(skillArg(args));
+  const raw = await readPreviewArg(args);
+  if (raw.success === false) {
+    const err = raw.error ?? {};
+    return {
+      ok: true,
+      command: "check-preview",
+      verdict: "block",
+      say: `The wallet refused to preview this call (${String(err.code ?? "")} ${String(err.name ?? err.message ?? "")}). Do not execute; tell the user.`,
+      reasons: [{ level: "block", text: String(err.message ?? "preview failed") }]
+    };
+  }
+  const data = raw.data ?? raw ?? {};
+  const sim = data.simulationResult ?? {};
+  const m = skill.manifest;
+  const reasons = [];
+  const allowances = Array.isArray(sim.allowanceChanges) ? sim.allowanceChanges : null;
+  if (allowances === null) reasons.push({ level: "warn", text: "the preview did not include allowance changes; review the approvals by hand" });
+  for (const a of allowances ?? []) {
+    const spender = pick(a, ["spender", "spenderAddress", "approveTo", "approvedAddress", "operator", "to"]);
+    const token = pick(a, ["token", "tokenAddress", "contractAddress", "asset", "address"]);
+    const amount = pick(a, ["amount", "value", "allowance", "newAllowance", "rawAmount", "approveAmount"]);
+    const unlimited = pick(a, ["isUnlimited", "isMax", "unlimited", "isInfinite"]) === true;
+    if (typeof spender !== "string" || typeof token !== "string") {
+      reasons.push({ level: "warn", text: `allowance change in an unrecognised format: ${JSON.stringify(a).slice(0, 160)}` });
+      continue;
+    }
+    if (unlimited) reasons.push({ level: "block", text: `simulation shows an unlimited approval to ${spender}` });
+    const flow = m?.onchain.flows.find((f) => f.kind === 0 && isAddressEqual(f.token, token) && isAddressEqual(f.counterparty, spender));
+    if (!flow) reasons.push({ level: "block", text: `simulation shows an approval to ${spender}, which the skill did not declare` });
+    else if (typeof amount === "string" && /^[0-9]+$/.test(amount) && BigInt(amount) > flow.cap) {
+      reasons.push({ level: "block", text: `simulated approval ${amount} exceeds the declared cap ${flow.cap}` });
+    } else reasons.push({ level: "ok", text: `approval to ${label(m, spender)} is declared` });
+  }
+  const authority = Array.isArray(sim.authorityChanges) ? sim.authorityChanges : [];
+  if (authority.length) reasons.push({ level: "block", text: `simulation shows ${authority.length} authority/permission change(s) on the wallet` });
+  const balances = Array.isArray(sim.balanceChanges) ? sim.balanceChanges : [];
+  for (const b of balances) {
+    const amount = String(pick(b, ["amount", "change", "value", "delta"]) ?? "");
+    const symbol = String(pick(b, ["symbol", "tokenSymbol", "token"]) ?? "");
+    if (amount) reasons.push({ level: "info", text: `balance change: ${amount} ${symbol}` });
+  }
+  const risks = data.risks?.riskDetails ?? [];
+  for (const r of Array.isArray(risks) ? risks : []) {
+    reasons.push({ level: "warn", text: `Binance risk check: ${String(r.title ?? r.code ?? "risk")}${r.description ? `: ${String(r.description)}` : ""}` });
+  }
+  const simCode = sim.simulationCode;
+  if (simCode !== void 0 && simCode !== 0 && simCode !== "0" && simCode !== "SUCCESS") {
+    reasons.push({ level: "warn", text: `simulation reported code ${String(simCode)}${sim.simulationErrorDetail ? `: ${String(sim.simulationErrorDetail)}` : ""}` });
+  }
+  if (data.requireConfirmation === true) reasons.push({ level: "info", text: "the Binance App will also ask for confirmation" });
+  if (!m) reasons.push({ level: "warn", text: "the skill declares no permissions; nothing to compare against" });
+  const verdict = verdictOf(reasons);
+  const requestId = typeof data.requestId === "string" ? data.requestId : void 0;
+  return {
+    ok: true,
+    command: "check-preview",
+    verdict,
+    say: verdict === "block" ? "Blocked: Binance's simulation shows effects outside what the skill declared. Do not execute; show the user these reasons." : "The simulated effects match the skill's declaration. Show the user the preview and execute only after an explicit yes.",
+    reasons,
+    next: verdict === "block" || !requestId ? [] : [
+      { what: "Only after the user explicitly says yes:", run: `baw contract-call execute --requestId ${requestId} --json` },
+      { what: "Then record the tx in the session:", run: "countersign session record <txHash>" }
+    ]
+  };
+}
+var stateDir = () => process.env.COUNTERSIGN_HOME ?? join3(homedir(), ".countersign");
+var sessionFile = () => join3(stateDir(), "session.json");
+async function loadSession() {
+  try {
+    return JSON.parse(await readFile4(sessionFile(), "utf8"));
+  } catch {
+    return null;
+  }
+}
+async function saveSession(s) {
+  await mkdir(stateDir(), { recursive: true });
+  const tmp = `${sessionFile()}.tmp`;
+  await writeFile(tmp, JSON.stringify(s, null, 2));
+  await rename(tmp, sessionFile());
+}
+async function cmdSession(args) {
+  const sub = args.positionals[1];
+  if (sub === "start") return sessionStart(args);
+  if (sub === "record") return sessionRecord(args);
+  if (sub === "status") return sessionStatus();
+  if (sub === "end") return sessionEnd(args);
+  if (sub === "clear") {
+    await rm(sessionFile(), { force: true });
+    return { ok: true, command: "session clear", say: "Session cleared." };
+  }
+  throw new UsageError("usage: countersign session start --skill <dir> --wallet <addr> | record <txHash> [--builtin] | status | end | clear");
+}
+async function sessionStart(args) {
+  const ctx = await loadContext(args);
+  const dir = resolve(flag(args, "skill") ?? args.positionals[2] ?? "");
+  const wallet = addressArg(flag(args, "wallet"), "--wallet");
+  const skill = await loadSkill(dir);
+  const { versionId, registered } = await versionOf(ctx, skill);
+  if (!versionId) return { ok: false, command: "session start", say: "This skill has no valid countersign.json with an Agent ID publisher, so a session cannot be countersigned." };
+  const existing = await loadSession();
+  const startNonce = await ctx.reader.client.getTransactionCount({ address: wallet, blockTag: "latest" });
+  const startBlock = await ctx.reader.getBlockNumber();
+  await saveSession({ chainId: ctx.chainId, versionId, skillDir: dir, wallet, startNonce, startBlock: startBlock.toString(), startedAt: (/* @__PURE__ */ new Date()).toISOString(), txs: [] });
+  const reasons = [];
+  if (existing) reasons.push({ level: "info", text: "an earlier unfinished session was replaced" });
+  if (!registered) reasons.push({ level: "warn", text: "this version is not registered yet; the session can be checked but not countersigned" });
+  return {
+    ok: true,
+    command: "session start",
+    say: `Session started for version ${versionId.slice(0, 10)}… (wallet nonce ${startNonce}). After each executed call, run: countersign session record <txHash>`,
+    reasons,
+    data: { versionId, wallet, startNonce, startBlock }
+  };
+}
+async function sessionRecord(args) {
+  const s = await loadSession();
+  if (!s) return { ok: false, command: "session record", say: "No active session. Run: countersign session start --skill <dir> --wallet <addr>" };
+  const hash3 = args.positionals[2];
+  if (!hash3 || !/^0x[0-9a-fA-F]{64}$/.test(hash3)) throw new UsageError("usage: countersign session record <txHash> [--builtin]");
+  if (!s.txs.some((t) => t.hash.toLowerCase() === hash3.toLowerCase())) s.txs.push({ hash: hash3.toLowerCase(), builtin: bool(args, "builtin") });
+  await saveSession(s);
+  return { ok: true, command: "session record", say: `Recorded ${s.txs.length} transaction(s) in this session.`, data: { txs: s.txs } };
+}
+async function sessionStatus() {
+  const s = await loadSession();
+  if (!s) return { ok: true, command: "session status", say: "No active session." };
+  return { ok: true, command: "session status", say: `Session for ${s.versionId.slice(0, 10)}… since ${s.startedAt}: ${s.txs.length} recorded tx(s).`, data: { session: s } };
+}
+async function sessionEnd(args) {
+  const s = await loadSession();
+  if (!s) return { ok: false, command: "session end", say: "No active session." };
+  const ctx = await loadContext({ ...args, flags: new Map([...args.flags, ["chain", String(s.chainId)]]) });
+  const reasons = [];
+  const version4 = await readVersion(ctx.reader, ctx.deployment, s.versionId);
+  const nonceNow = await ctx.reader.client.getTransactionCount({ address: s.wallet, blockTag: "latest" });
+  const sent = nonceNow - s.startNonce;
+  const unexplained = sent - s.txs.length;
+  if (unexplained > 0) {
+    reasons.push({
+      level: "block",
+      text: `${unexplained} transaction(s) left this wallet during the session that COUNTERSIGN never saw. Check \`baw wallet tx-history --json\` with the user; if any is unexpected, report it`
+    });
+  } else {
+    reasons.push({ level: "ok", text: `every transaction from this wallet during the session was recorded (${sent})` });
+  }
+  const calls = s.txs.filter((t) => !t.builtin).map((t) => t.hash);
+  if (s.txs.some((t) => t.builtin)) reasons.push({ level: "info", text: "built-in wallet actions (swaps etc.) are not citable: their calldata is not visible to the agent" });
+  if (!version4) {
+    reasons.push({ level: "warn", text: "the version is not registered, so nothing can be countersigned" });
+    return { ok: true, command: "session end", verdict: verdictOf(reasons), say: "Session checked; this version is not registered.", reasons };
+  }
+  if (calls.length === 0) {
+    reasons.push({ level: "warn", text: "no contract calls were recorded, so there is nothing to cite" });
+    return { ok: true, command: "session end", verdict: verdictOf(reasons), say: "Nothing to countersign.", reasons };
+  }
+  const agent = await readAgentId(ctx.reader, ctx.deployment.agentId, s.wallet);
+  if (!agent) {
+    reasons.push({ level: "block", text: "this wallet holds no Agent ID; only Agent ID holders can countersign or report" });
+    return { ok: true, command: "session end", verdict: "block", say: "This wallet cannot countersign: it holds no Agent ID.", reasons };
+  }
+  const head = await ctx.reader.getBlockNumber();
+  const cite = calls.slice(-LIMITS.txHashes);
+  const record = { versionId: s.versionId, agentId: agent.agentId, signer: s.wallet, blockNumber: head, kind: KIND_COUNTERSIGN, txHashes: cite };
+  const [countersigns, reports] = await Promise.all([
+    readRecords(ctx.reader, ctx.deployment, s.versionId, KIND_COUNTERSIGN),
+    readRecords(ctx.reader, ctx.deployment, s.versionId, KIND_REPORT)
+  ]);
+  const verdict = await evaluateRecord(
+    { chainId: ctx.chainId, version: version4, countersigns, reports, graph: { countersignedAuthors: /* @__PURE__ */ new Set() } },
+    ctx.reader,
+    record
+  );
+  const effectProblems = verdict.reasons.filter((r) => /approval|operator|transfer|value-over-cap|undeclared|code-changed/.test(r));
+  if (effectProblems.length) reasons.push({ level: "block", text: `the session went outside the manifest: ${[...new Set(effectProblems)].join(", ")}` });
+  const otherProblems = verdict.reasons.filter((r) => !effectProblems.includes(r));
+  for (const p of new Set(otherProblems)) reasons.push({ level: p === "no-anchor-hit" ? "warn" : "warn", text: `would not count: ${p}` });
+  const dirty = effectProblems.length > 0 || unexplained > 0;
+  const base = { ok: true, command: "session end", reasons, verdict: verdictOf(reasons), say: "" };
+  if (dirty) {
+    const evidence = cite.slice(0, LIMITS.txHashes);
+    const data2 = encodeReport(s.versionId, evidence);
+    return {
+      ...base,
+      say: "This session was not clean. Tell the user what went outside the manifest. If they want, prepare a report (it is public, and counts as a verified incident only if chain data proves it).",
+      next: [
+        { what: LINKAGE_NOTICE },
+        { what: "If the user chooses to report, preview it (sends nothing):", run: bawPreview(ctx.chainId, s.wallet, ctx.deployment.countersign, data2) },
+        { what: "Execute only after an explicit yes: baw contract-call execute --requestId <requestId> --json" }
+      ],
+      data: { versionId: s.versionId, cited: evidence, calldata: data2 }
+    };
+  }
+  if (verdict.status === "rejected") {
+    return { ...base, say: "The session was clean, but a countersign would not count (see reasons). Nothing to sign.", data: { versionId: s.versionId } };
+  }
+  const data = encodeCountersign(s.versionId, cite);
+  try {
+    await ctx.reader.client.simulateContract({ account: s.wallet, address: ctx.deployment.countersign, abi: countersignAbi, functionName: "countersign", args: [s.versionId, cite] });
+  } catch (e) {
+    reasons.push({ level: "block", text: `simulated countersign() reverts: ${e.message.split("\n")[0]}` });
+    return { ...base, verdict: "block", say: "A countersign would revert (see reasons).", reasons };
+  }
+  return {
+    ...base,
+    say: "Your session was clean and verifiable. Offer the user to countersign this skill version (one small, zero-value transaction).",
+    next: [
+      { what: LINKAGE_NOTICE },
+      { what: "If the user agrees, preview it (sends nothing):", run: bawPreview(ctx.chainId, s.wallet, ctx.deployment.countersign, data) },
+      { what: "Execute only after an explicit yes: baw contract-call execute --requestId <requestId> --json; then: countersign session clear" }
+    ],
+    data: { versionId: s.versionId, cited: cite, calldata: data }
+  };
+}
+async function manual(args, kind) {
+  const ctx = await loadContext(args);
+  const versionId = args.positionals[1];
+  if (!versionId || !/^0x[0-9a-fA-F]{64}$/.test(versionId)) throw new UsageError(`usage: countersign ${kind} <versionId> <txHash>... --from <wallet>`);
+  const txs = [...args.positionals.slice(2), ...list(args, "txs")];
+  const from15 = addressArg(flag(args, "from"), "--from");
+  const data = kind === "countersign" ? encodeCountersign(versionId, txs) : encodeReport(versionId, txs);
+  try {
+    await ctx.reader.client.simulateContract({
+      account: from15,
+      address: ctx.deployment.countersign,
+      abi: countersignAbi,
+      functionName: kind,
+      args: [versionId, txs]
+    });
+  } catch (e) {
+    return { ok: false, command: kind, say: `Simulated ${kind}() reverts: ${e.message.split("\n")[0]}` };
+  }
+  return {
+    ok: true,
+    command: kind,
+    say: `Ready. ${LINKAGE_NOTICE}`,
+    next: [
+      { what: "Preview (sends nothing):", run: bawPreview(ctx.chainId, from15, ctx.deployment.countersign, data) },
+      { what: "Execute only after an explicit yes: baw contract-call execute --requestId <requestId> --json" }
+    ],
+    data: { calldata: data }
+  };
+}
+var cmdCountersign = (args) => manual(args, "countersign");
+var cmdReport = (args) => manual(args, "report");
+async function cmdStatus(args) {
+  const ctx = await loadContext(args);
+  const arg = args.positionals[1];
+  if (!arg) throw new UsageError("usage: countersign status <versionId | skill-dir>");
+  let versionId = /^0x[0-9a-fA-F]{64}$/.test(arg) ? arg : null;
+  if (!versionId) versionId = (await versionOf(ctx, await loadSkill(arg))).versionId;
+  if (!versionId) return { ok: false, command: "status", say: "Could not compute a version id (no valid countersign.json, or the publisher holds no Agent ID)." };
+  const { report, source } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
+  if (!report) return { ok: true, command: "status", say: "This version is not registered." };
+  return {
+    ok: true,
+    command: "status",
+    say: `${report.status.toUpperCase()}: countersigned by ${report.countersigns.counted}, ${report.incidents.length} verified incident(s), ${report.claims.total} unverified report(s) [${source}, ${report.ruleset}].`,
+    data: { report }
+  };
+}
 
 // src/cli.ts
 var COMMANDS = {
@@ -22104,9 +23631,27 @@ var COMMANDS = {
   manifest: cmdManifest,
   redline: cmdRedline,
   register: cmdRegister,
-  endorse: cmdEndorse
+  endorse: cmdEndorse,
+  "check-install": cmdCheckInstall,
+  "check-call": cmdCheckCall,
+  "check-preview": cmdCheckPreview,
+  session: cmdSession,
+  countersign: cmdCountersign,
+  report: cmdReport,
+  status: cmdStatus
 };
 var HELP = `countersign: proof-of-use trust for agent skills (BNB Smart Chain)
+
+User commands (run inside the user's agent, next to the Agentic Wallet skill)
+  check-install <skill-dir>                before installing or first using a skill: allow / warn / block
+  check-call --skill <dir> --to <a> --data <hex> [--value <wei>] [--from <wallet>]
+                                           before every \`baw contract-call preview\`: is the call declared?
+  check-preview --skill <dir> --preview <file|-|json>
+                                           after preview: do Binance's simulated effects match the manifest?
+  session start --skill <dir> --wallet <a> | record <txHash> [--builtin] | status | end | clear
+                                           prove a clean session, then offer a countersign (or a report)
+  status <versionId | skill-dir>           verified counts and incidents for a version
+  countersign | report <versionId> <txHash>... --from <wallet>     manual calldata (simulated first)
 
 Author commands
   hash <skill-dir>                         content hash + file list
@@ -22119,6 +23664,8 @@ Common flags
   --json                 machine-readable output (agents should always pass it)
   --deployment <file>    contracts/deployments/<chainId>.json (default: built-in mainnet addresses)
   --rpc <url[,url]>      RPC endpoints (default: public BSC endpoints with fallback)
+  --verify-local         verify from chain data here instead of asking the COUNTERSIGN API
+  --no-content           skip fetching published content (C1 / static incidents) when verifying locally
 
 This tool never signs or sends anything. Every on-chain step is a \`baw contract-call preview\` command for
 the agent to run, followed by an explicit "yes" from the user before \`baw contract-call execute\`.

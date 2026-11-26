@@ -10,12 +10,14 @@ CLI="node $ROOT/skills/countersign/scripts/countersign.mjs"
 # anvil accounts: 0 alice (deployer/registry owner), 1 bob (author), 2 carol (user), 3 dave (user)
 BOB=0x70997970C51812dc3A010C7d01b50e0d17dc79C8;   BOB_PK=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 CAROL=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC; CAROL_PK=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
+DAVE=0x90F79bf6EB2c4f870365E785982E1f101E93b906;  DAVE_PK=0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
+ERIN=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65;  ERIN_PK=0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a
 pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; exit 1; }
 json() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s);console.log($1)})"; }
 
 anvil --port "$PORT" --silent & APID=$!
-WORK="$(mktemp -d)"; trap 'kill $APID 2>/dev/null || true; rm -rf "$WORK"' EXIT
+WORK="$(mktemp -d)"; export COUNTERSIGN_HOME="$WORK/home"; trap 'kill $APID 2>/dev/null || true; rm -rf "$WORK"' EXIT
 n=0; until cast block-number --rpc-url "$RPC" >/dev/null 2>&1; do n=$((n+1)); [ $n -gt 400000 ] && fail "anvil did not start"; done
 
 echo "1. deploy local stack"
@@ -60,5 +62,50 @@ $CLI register "$WORK/demo-skill" --uri "https://github.com/example/demo/tree/012
 
 echo "6. registering from a wallet that is not the publisher is blocked"
 if $CLI register "$WORK/demo-skill" --uri "https://github.com/example/demo/tree/0123abcd/demo-skill" --from "$CAROL" $COMMON >/dev/null; then fail "should block non-publisher"; else pass "non-publisher blocked (would not be canonical)"; fi
+
+CS=$(json 'o.countersign' < "$DEP")
+LOCAL="--verify-local --no-content"
+
+echo "7. check-install (user, before first use)"
+OUT=$($CLI check-install "$WORK/demo-skill" $COMMON $LOCAL)
+V=$(echo "$OUT" | json 'o.verdict'); [ "$V" != "block" ] && pass "registered skill is not blocked ($V: $(echo "$OUT" | json 'o.say'))" || { echo "$OUT"; fail "check-install"; }
+
+echo "8. check-call (before every wallet call)"
+PING=$(cast calldata 'ping()')
+[ "$($CLI check-call --skill "$WORK/demo-skill" --to "$APP" --data "$PING" --from "$CAROL" --json | json 'o.verdict')" = "allow" ] && pass "declared call allowed" || fail "declared call"
+[ "$($CLI check-call --skill "$WORK/demo-skill" --to "$REG" --data "$PING" --json | json 'o.verdict')" = "block" ] && pass "undeclared target blocked" || fail "undeclared target"
+MAXAPPROVE=$(cast calldata 'approve(address,uint256)' 0x000000000000000000000000000000000000dEaD $(cast max-uint))
+[ "$($CLI check-call --skill "$WORK/demo-skill" --to "$APP" --data "$MAXAPPROVE" --json | json 'o.verdict')" = "block" ] && pass "max approval blocked" || fail "max approval"
+
+echo "9. clean session -> countersign -> verified"
+$CLI session start --skill "$WORK/demo-skill" --wallet "$CAROL" $COMMON >/dev/null
+TX=$(cast send --rpc-url "$RPC" --private-key "$CAROL_PK" "$APP" 'ping()' --json | json 'o.transactionHash')
+$CLI session record "$TX" --json >/dev/null
+OUT=$($CLI session end $COMMON)
+CDATA=$(echo "$OUT" | json 'o.data && o.data.calldata || ""')
+[ -n "$CDATA" ] && echo "$OUT" | json 'o.next[0].what' | grep -q "permanently links" && pass "session clean; countersign offered with the public-linkage notice" || { echo "$OUT"; fail "session end (clean)"; }
+cast send --rpc-url "$RPC" --private-key "$CAROL_PK" "$CS" "$CDATA" >/dev/null || fail "countersign tx"
+$CLI session clear >/dev/null
+STATUS=$($CLI status "$VERSION" $COMMON $LOCAL)
+[ "$(echo "$STATUS" | json 'o.data.report.countersigns.counted')" = "1" ] && pass "verifier counts it: $(echo "$STATUS" | json 'o.say')" || { echo "$STATUS"; fail "verified count"; }
+
+echo "10. a tx COUNTERSIGN never saw makes the session unclean"
+$CLI session start --skill "$WORK/demo-skill" --wallet "$DAVE" $COMMON >/dev/null
+T1=$(cast send --rpc-url "$RPC" --private-key "$DAVE_PK" "$APP" 'ping()' --json | json 'o.transactionHash')
+$CLI session record "$T1" --json >/dev/null
+cast send --rpc-url "$RPC" --private-key "$DAVE_PK" "$ERIN" --value 1 >/dev/null   # hidden transfer, never recorded
+OUT=$($CLI session end $COMMON)
+[ "$(echo "$OUT" | json 'o.verdict')" = "block" ] && echo "$OUT" | json 'o.reasons[0].text' | grep -q "never saw" && pass "unexplained tx -> no countersign offered" || { echo "$OUT"; fail "unexplained tx"; }
+$CLI session clear >/dev/null
+
+echo "11. the author cannot countersign their own skill"
+if $CLI countersign "$VERSION" "$TX" --from "$BOB" $COMMON >/dev/null; then fail "self-countersign should revert"; else pass "self-countersign rejected (simulated revert)"; fi
+
+echo "12. a smear report from a competitor's own wallet stays a claim"
+SMEAR=$(cast send --rpc-url "$RPC" --private-key "$ERIN_PK" "$APP" 'ping()' --json | json 'o.transactionHash')
+RDATA=$(cast calldata 'report(bytes32,bytes32[])' "$VERSION" "[$SMEAR]")
+cast send --rpc-url "$RPC" --private-key "$ERIN_PK" "$CS" "$RDATA" >/dev/null || fail "report tx"
+STATUS=$($CLI status "$VERSION" $COMMON $LOCAL)
+[ "$(echo "$STATUS" | json 'o.data.report.incidents.length')" = "0" ] && [ "$(echo "$STATUS" | json 'o.data.report.claims.total')" = "1" ] && pass "no incident; 1 unverified claim; still counted 1" || { echo "$STATUS"; fail "smear"; }
 
 echo "e2e: all checks passed"
