@@ -17,7 +17,9 @@ fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; exit 1; }
 json() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s);console.log($1)})"; }
 
 anvil --port "$PORT" --silent & APID=$!
-WORK="$(mktemp -d)"; export COUNTERSIGN_HOME="$WORK/home"; trap 'kill $APID 2>/dev/null || true; rm -rf "$WORK"' EXIT
+WORK="$(mktemp -d)"; export COUNTERSIGN_HOME="$WORK/home"
+if [ -n "${E2E_KEEP_ALIVE:-}" ]; then trap 'rm -rf "$WORK"; echo "anvil left running (pid $APID) on $RPC"' EXIT
+else trap 'kill $APID 2>/dev/null || true; rm -rf "$WORK"' EXIT; fi
 n=0; until cast block-number --rpc-url "$RPC" >/dev/null 2>&1; do n=$((n+1)); [ $n -gt 400000 ] && fail "anvil did not start"; done
 
 echo "1. deploy local stack"

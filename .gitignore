@@ -28,3 +28,7 @@ COUNTERSIGN-architecture.excalidraw
 *.log
 .idea/
 .vscode/
+
+# next.js
+web/.next/
+web/next-env.d.ts
