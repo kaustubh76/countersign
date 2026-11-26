@@ -33,6 +33,7 @@ export interface ChainReader {
   getTransaction(hash: Hash): Promise<Transaction | null>;
   getReceipt(hash: Hash): Promise<TransactionReceipt | null>;
   getCode(address: Address): Promise<`0x${string}` | undefined>;
+  getStorageAt(address: Address, slot: `0x${string}`): Promise<`0x${string}` | undefined>;
   getBlockNumber(): Promise<bigint>;
 }
 
@@ -97,6 +98,9 @@ export function createReader(opts: ReaderOptions = {}): ChainReader {
     },
     async getCode(address) {
       return (await firstFound(async (c) => (await c.getCode({ address })) ?? "0x")) ?? undefined;
+    },
+    async getStorageAt(address, slot) {
+      return (await firstFound((c) => c.getStorageAt({ address, slot }))) ?? undefined;
     },
     getBlockNumber: () => client.getBlockNumber(),
   };

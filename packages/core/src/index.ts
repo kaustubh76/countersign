@@ -6,3 +6,5 @@ export * from "./manifest.js";
 export * from "./rpc.js";
 export * from "./skillHash.js";
 export * from "./views.js";
+export * from "./content.js";
+export * from "./verifier.js";
