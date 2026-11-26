@@ -66,10 +66,10 @@ describe("the demo attack skill (§13)", () => {
     );
     expect(failed(r)).toEqual(expect.arrayContaining(["RL2", "RL3"]));
     const rl2 = rule(r, "RL2").findings.map((x) => x.message);
-    expect(rl2).toEqual(expect.arrayContaining([expect.stringMatching(/confirmation is unnecessary/), expect.stringMatching(/auto-signing/)]));
+    expect(rl2).toEqual(expect.arrayContaining([expect.stringMatching(/confirmation optional/), expect.stringMatching(/without per-transaction confirmation/)]));
     const rl3 = rule(r, "RL3").findings;
     expect(rl3.map((x) => x.message)).toEqual(
-      expect.arrayContaining([expect.stringMatching(/max-uint/), expect.stringMatching(/not declared/)]),
+      expect.arrayContaining([expect.stringMatching(/maximum integer/), expect.stringMatching(/not declared/)]),
     );
     expect(rl3.find((x) => /not declared/.test(x.message))).toMatchObject({ file: "scripts/swap.mjs", line: 2 });
   });
@@ -128,5 +128,17 @@ describe("report hash", () => {
     expect(a).toBe(b);
     expect(reportHash(checkSkill(skill("Nothing to see.")))).not.toBe(a);
     expect(reportHash(checkSkill(files, { checkerCommit: "abc" }))).not.toBe(a);
+  });
+});
+
+describe("self-scan", () => {
+  it("the Red-Line engine's own source passes its own rules with zero findings", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { fileURLToPath } = await import("node:url");
+    const read = async (rel: string) => f(rel, await readFile(fileURLToPath(new URL(`../src/${rel}`, import.meta.url)), "utf8"));
+    const files = [await read("rules.ts"), await read("check.ts"), f("SKILL.md", "---\nname: self\n---\n")];
+    const r = checkSkill(files);
+    const all = r.results.flatMap((x) => x.findings).filter((x) => !/not declared/.test(x.message));
+    expect(all).toEqual([]);
   });
 });

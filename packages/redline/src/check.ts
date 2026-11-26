@@ -35,6 +35,8 @@ export const WELL_KNOWN: Record<string, string> = {
   "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": "USDC",
   "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": "WBNB",
   "0x000000000022d473030f116ddee9f6b43ac78ba3": "Permit2",
+  "0xca11bde05977b3631167028862be2a173976ca11": "Multicall3 (same address on every EVM chain)",
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": "native-token placeholder (EIP-7528)",
   "0x000000000000000000000000000000000000dead": "burn address",
   [zeroAddress]: "zero address",
 };
@@ -175,7 +177,7 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
         file: f.path,
         line: lineOf(text, index),
         snippet: snippetAt(text, index, m[0].length),
-        message: `address ${getAddress(m[0] as Address)} is not declared in ${MANIFEST_FILE}`,
+        message: `address ${getAddress(m[0] as Address)} is not declared in ${MANIFEST_FILE} (undeclared recipient or spender)`,
       });
     }
 
@@ -225,7 +227,7 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
       file: "SKILL.md",
       line: 1,
       snippet: "",
-      message: "the skill trades but shows no risk warning",
+      message: "trading skill without a risk warning",
     });
   }
 

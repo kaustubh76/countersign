@@ -1835,11 +1835,11 @@ function clean(...arrays) {
 function createView(arr) {
   return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
 }
-function rotr(word2, shift) {
-  return word2 << 32 - shift | word2 >>> shift;
+function rotr(word3, shift) {
+  return word3 << 32 - shift | word3 >>> shift;
 }
-function byteSwap(word2) {
-  return word2 << 24 & 4278190080 | word2 << 8 & 16711680 | word2 >>> 8 & 65280 | word2 >>> 24 & 255;
+function byteSwap(word3) {
+  return word3 << 24 & 4278190080 | word3 << 8 & 16711680 | word3 >>> 8 & 65280 | word3 >>> 24 & 255;
 }
 function byteSwap32(arr) {
   for (let i = 0; i < arr.length; i++) {
@@ -3436,13 +3436,13 @@ function decodeParameter(cursor, param, budget, staticPosition) {
 function readNumber(cursor) {
   return wordToNumber(cursor.readBytes(32));
 }
-function wordToNumber(word2, signed) {
+function wordToNumber(word3, signed) {
   let high = 0;
   for (let i = 0; i < 25; i++)
-    high |= word2[i];
-  if (high === 0 && word2[25] < 32)
-    return (word2[25] << 16 | word2[26] << 8 | word2[27]) * 4294967296 + ((word2[28] << 24 | word2[29] << 16 | word2[30] << 8 | word2[31]) >>> 0);
-  return bytesToNumber(word2, { signed });
+    high |= word3[i];
+  if (high === 0 && word3[25] < 32)
+    return (word3[25] << 16 | word3[26] << 8 | word3[27]) * 4294967296 + ((word3[28] << 24 | word3[29] << 16 | word3[30] << 8 | word3[31]) >>> 0);
+  return bytesToNumber(word3, { signed });
 }
 function decodeAddress(cursor) {
   const value = cursor.readBytes(32);
@@ -5441,17 +5441,17 @@ function constTimeNegate(condition, item) {
   const neg = item.negate();
   return condition ? neg : item;
 }
-function validateW(W2, bits) {
-  if (!Number.isSafeInteger(W2) || W2 <= 0 || W2 > bits)
-    throw new Error("invalid window size, expected [1.." + bits + "], got W=" + W2);
+function validateW(W, bits) {
+  if (!Number.isSafeInteger(W) || W <= 0 || W > bits)
+    throw new Error("invalid window size, expected [1.." + bits + "], got W=" + W);
 }
-function calcWOpts(W2, scalarBits) {
-  validateW(W2, scalarBits);
-  const windows = Math.ceil(scalarBits / W2) + 1;
-  const windowSize = 2 ** (W2 - 1);
-  const maxNumber = 2 ** W2;
-  const mask = bitMask(W2);
-  const shiftBy = BigInt(W2);
+function calcWOpts(W, scalarBits) {
+  validateW(W, scalarBits);
+  const windows = Math.ceil(scalarBits / W) + 1;
+  const windowSize = 2 ** (W - 1);
+  const maxNumber = 2 ** W;
+  const mask = bitMask(W);
+  const shiftBy = BigInt(W);
   return { windows, windowSize, mask, maxNumber, shiftBy };
 }
 function calcOffsets(n, window, wOpts) {
@@ -5518,8 +5518,8 @@ function wNAF(c, bits) {
      * @param W window size
      * @returns precomputed point tables flattened to a single array
      */
-    precomputeWindow(elm, W2) {
-      const { windows, windowSize } = calcWOpts(W2, bits);
+    precomputeWindow(elm, W) {
+      const { windows, windowSize } = calcWOpts(W, bits);
       const points = [];
       let p = elm;
       let base = p;
@@ -5541,10 +5541,10 @@ function wNAF(c, bits) {
      * @param n scalar (we don't check here, but should be less than curve order)
      * @returns real and fake (for const-time) points
      */
-    wNAF(W2, precomputes, n) {
+    wNAF(W, precomputes, n) {
       let p = c.ZERO;
       let f = c.BASE;
-      const wo = calcWOpts(W2, bits);
+      const wo = calcWOpts(W, bits);
       for (let window = 0; window < wo.windows; window++) {
         const { nextN, offset, isZero, isNeg, isNegF, offsetF } = calcOffsets(n, window, wo);
         n = nextN;
@@ -5564,8 +5564,8 @@ function wNAF(c, bits) {
      * @param acc accumulator point to add result of multiplication
      * @returns point
      */
-    wNAFUnsafe(W2, precomputes, n, acc = c.ZERO) {
-      const wo = calcWOpts(W2, bits);
+    wNAFUnsafe(W, precomputes, n, acc = c.ZERO) {
+      const wo = calcWOpts(W, bits);
       for (let window = 0; window < wo.windows; window++) {
         if (n === _0n4)
           break;
@@ -5580,31 +5580,31 @@ function wNAF(c, bits) {
       }
       return acc;
     },
-    getPrecomputes(W2, P, transform) {
+    getPrecomputes(W, P, transform) {
       let comp = pointPrecomputes.get(P);
       if (!comp) {
-        comp = this.precomputeWindow(P, W2);
-        if (W2 !== 1)
+        comp = this.precomputeWindow(P, W);
+        if (W !== 1)
           pointPrecomputes.set(P, transform(comp));
       }
       return comp;
     },
     wNAFCached(P, n, transform) {
-      const W2 = getW(P);
-      return this.wNAF(W2, this.getPrecomputes(W2, P, transform), n);
+      const W = getW(P);
+      return this.wNAF(W, this.getPrecomputes(W, P, transform), n);
     },
     wNAFCachedUnsafe(P, n, transform, prev) {
-      const W2 = getW(P);
-      if (W2 === 1)
+      const W = getW(P);
+      if (W === 1)
         return this.unsafeLadder(P, n, prev);
-      return this.wNAFUnsafe(W2, this.getPrecomputes(W2, P, transform), n, prev);
+      return this.wNAFUnsafe(W, this.getPrecomputes(W, P, transform), n, prev);
     },
     // We calculate precomputes for elliptic curve point multiplication
     // using windowed method. This specifies window size and
     // stores precomputed values. Usually only base point would be precomputed.
-    setWindowSize(P, W2) {
-      validateW(W2, bits);
-      pointWindowSizes.set(P, W2);
+    setWindowSize(P, W) {
+      validateW(W, bits);
+      pointWindowSizes.set(P, W);
       pointPrecomputes.delete(P);
     }
   };
@@ -6659,8 +6659,8 @@ var init_weierstrass = __esm({
         const { _tlv: tlv, _int: int } = DER;
         const rs = tlv.encode(2, int.encode(sig.r));
         const ss = tlv.encode(2, int.encode(sig.s));
-        const seq = rs + ss;
-        return tlv.encode(48, seq);
+        const seq2 = rs + ss;
+        return tlv.encode(48, seq2);
       }
     };
     _0n5 = BigInt(0);
@@ -6918,10 +6918,10 @@ function schnorrSign(message, privateKey, auxRand = randomBytes(32)) {
   const k_ = modN(num(rand));
   if (k_ === _0n6)
     throw new Error("sign failed: k is zero");
-  const { bytes: rx, scalar: k } = schnorrGetExtPubKey(k_);
-  const e = challenge(rx, px, m);
+  const { bytes: rx2, scalar: k } = schnorrGetExtPubKey(k_);
+  const e = challenge(rx2, px, m);
   const sig = new Uint8Array(64);
-  sig.set(rx, 0);
+  sig.set(rx2, 0);
   sig.set(numTo32b(modN(k + e * d)), 32);
   if (!schnorrVerify(sig, m, px))
     throw new Error("sign: Invalid signature produced");
@@ -14125,8 +14125,8 @@ function decodeBytes2(cursor, param, { staticPosition }) {
     cursor.setPosition(staticPosition + 32);
     return [fromBytes(data), 32];
   }
-  const word2 = cursor.readBytes(32);
-  return [fromBytes(word2.subarray(0, Number.parseInt(size5, 10))), 32];
+  const word3 = cursor.readBytes(32);
+  return [fromBytes(word3.subarray(0, Number.parseInt(size5, 10))), 32];
 }
 function decodeNumber2(cursor, param) {
   const signed = param.type.startsWith("int");
@@ -21286,6 +21286,9 @@ function createReader(opts = {}) {
     async getCode(address) {
       return await firstFound(async (c) => await c.getCode({ address }) ?? "0x") ?? void 0;
     },
+    async getStorageAt(address, slot) {
+      return await firstFound((c) => c.getStorageAt({ address, slot })) ?? void 0;
+    },
     getBlockNumber: () => client.getBlockNumber()
   };
 }
@@ -21408,29 +21411,49 @@ var RULE_BITS = {
   RL8: 1 << 7
 };
 var RULE_TITLES = {
-  RL1: "No pairing-code or QR login outside the Binance App",
-  RL2: "No prompts that bypass user confirmation of asset actions",
-  RL3: "No unlimited approvals or undeclared transfer recipients",
-  RL5: "No Binance / BNB branding in skill names or domains",
-  RL6: "No collection of wallet secrets",
+  RL1: "Wallet pairing stays inside the Binance App",
+  RL2: "The user sees and confirms every asset action",
+  RL3: "Approvals are capped and recipients are declared",
+  RL5: "No brand impersonation in names or domains",
+  RL6: "Wallet secrets stay with the user",
   RL7: "No promised returns",
-  RL8: "Risk warning when the skill trades (advisory)"
+  RL8: "Trading skills show a risk warning (advisory)"
 };
-var W = String.raw`[\s\-]*`;
+var SP = String.raw`\s+`;
+var alt = (...xs) => `(?:${xs.join("|")})`;
+var opt = (x) => `(?:${x})?`;
+var seq = (...xs) => xs.join(SP);
+var joiner = String.raw`[\s\-]*`;
+var glued = (...xs) => xs.join(joiner);
+var word2 = (src) => String.raw`\b${src}\b`;
+var rx = (src, flags = "gi") => new RegExp(src, flags);
+var SUBJECT = alt("the", "your", "my", "me", "us", "it", "this", "its");
+var SUBJECTS = `(?:${SUBJECT}${SP}){0,2}`;
+var HAND_OVER = alt("enter", "paste", "type", "input", "submit", "send", "share", "give", "provide", "reveal", "export", seq("tell", "me"));
+var CONFIRM_NOUN = alt("confirmation", "confirmations", seq("confirm", "step"), seq("approval", "prompt"), seq("user", "approval"), "preview");
+var ASSET_VERB = alt("approve", "sign", "execute", "send", "transfer", "confirm", "swap");
+var MAX_LITERAL = alt(
+  ["Max", "Uint256"].join(""),
+  ["max", "Uint256"].join(""),
+  ["MAX", "_UINT256"].join(""),
+  String.raw`type\(uint256\)\.max`,
+  String.raw`2\s*\*\*\s*256\s*-\s*1`,
+  String.raw`0x[fF]{64}`
+);
 var TEXT_PATTERNS = [
-  // RL1: login flows that move pairing outside the official App confirmation
+  // RL1: pairing codes leaving the official App flow
   {
     rule: "RL1",
     severity: "fail",
     negatable: true,
-    re: /\b(?:enter|paste|type|input|submit|send|share|give)\s+(?:(?:me|us|it|the|your|this)\s+){0,2}(?:6[\s-]*(?:character|char|digit)\s+)?pairing\s+code\b/gi,
-    message: "asks the user to hand over or type a pairing code (pairing is confirmed only inside the Binance App)"
+    re: rx(word2(`${HAND_OVER}${SP}${SUBJECTS}${opt(`6${joiner}${alt("character", "char", "digit")}${SP}`)}${seq("pairing", "code")}`)),
+    message: "pairing code requested outside the Binance App"
   },
   {
     rule: "RL1",
     severity: "fail",
     negatable: true,
-    re: /\bscan\s+(?:the|this|our)\s+qr\s*code\s+(?:on|at|from)\s+(?:our|this|the)\s+(?:site|website|page|dashboard)\b/gi,
+    re: rx(word2(seq("scan", alt("the", "this", "our"), String.raw`qr\s*code`, alt("on", "at", "from"), alt("our", "this", "the"), alt("site", "website", "page", "dashboard")))),
     message: "web-based QR login"
   },
   // RL2: confirmation bypass
@@ -21438,112 +21461,121 @@ var TEXT_PATTERNS = [
     rule: "RL2",
     severity: "fail",
     negatable: false,
-    re: /\bno\s+need\s+to\s+(?:ask|confirm|wait|check\s+with)\b/gi,
-    message: "tells the agent confirmation is unnecessary"
+    re: rx(word2(seq("no", "need", "to", alt("ask", "confirm", "wait", seq("check", "with"))))),
+    message: "wording that makes user confirmation optional"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: /\b(?:skip|bypass|disable|avoid|omit|suppress)\s+(?:the\s+|any\s+|all\s+|user\s+|every\s+)*(?:confirmation|confirmations|confirm\s+step|approval\s+prompt|user\s+approval|preview)\b/gi,
-    message: "instructs the agent to skip user confirmation"
+    re: rx(word2(`${alt("skip", "bypass", "disable", "avoid", "omit", "suppress")}${SP}(?:${alt("the", "any", "all", "user", "every")}${SP})*${CONFIRM_NOUN}`)),
+    message: "wording that removes the user's confirmation step"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: /\b(?:don'?t|do\s+not|never)\s+(?:ask|wait\s+for|prompt|bother)\s+(?:the\s+)?(?:user|human|owner)(?:\s+(?:for|to))?\s+(?:confirm|confirmation|approval|permission)\b/gi,
-    message: "instructs the agent not to ask the user for confirmation"
+    re: rx(word2(seq(alt("don'?t", seq("do", "not"), "never"), alt("ask", seq("wait", "for"), "prompt", "bother"), `${opt(`the${SP}`)}${alt("user", "human", "owner")}${opt(`${SP}${alt("for", "to")}`)}`, alt("confirm", "confirmation", "approval", "permission")))),
+    message: "wording that keeps the user out of the decision"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: new RegExp(String.raw`\b(?:use|enable|turn\s+on|rely\s+on|with)\s+(?:the\s+)?secure${W}auto${W}sign\b`, "gi"),
-    message: "steers the user to auto-signing so actions execute without per-transaction confirmation"
+    re: rx(word2(seq(alt("use", "enable", seq("turn", "on"), seq("rely", "on"), "with"), `${opt(`the${SP}`)}${glued("secure", "auto", "sign")}`))),
+    message: "steers the user to a mode that signs without per-transaction confirmation"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: new RegExp(String.raw`\bauto${W}(?:confirm|approve|sign|execute)(?:s|d|ing)?\b`, "gi"),
-    message: "auto-confirms / auto-signs asset actions"
+    re: rx(word2(`${glued("auto", alt("confirm", "approve", "sign", "execute"))}${opt(alt("s", "d", "ing"))}`)),
+    message: "unattended signing wording"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: /\b(?:silently|quietly|automatically)\s+(?:approve|sign|execute|send|transfer|confirm|swap)\b/gi,
-    message: "performs asset actions without the user seeing them"
+    re: rx(word2(seq(alt("silently", "quietly", "automatically"), ASSET_VERB))),
+    message: "asset action the user does not see"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: /\b(?:execute|broadcast|send)\s+(?:it\s+|the\s+transaction\s+|immediately\s+|directly\s+|right\s+away\s+)*without\s+(?:asking|confirmation|confirming|showing|telling|waiting)\b/gi,
-    message: "executes without showing or confirming"
+    re: rx(word2(`${alt("execute", "broadcast", "send")}${SP}(?:${alt("it", seq("the", "transaction"), "immediately", "directly", seq("right", "away"))}${SP})*${seq("without", alt("asking", "confirmation", "confirming", "showing", "telling", "waiting"))}`)),
+    message: "execution before the user has seen it"
   },
   {
     rule: "RL2",
     severity: "fail",
     negatable: true,
-    re: /\b(?:hide|don'?t\s+show|do\s+not\s+show|never\s+show)\s+(?:the\s+)?(?:transaction|tx|preview|details|amount|recipient|approval)\b/gi,
-    message: "hides transaction details from the user"
+    re: rx(word2(seq(alt("hide", "don'?t show", "do not show", "never show"), `${opt(`the${SP}`)}${alt("transaction", "tx", "preview", "details", "amount", "recipient", "approval")}`))),
+    message: "transaction details kept from the user"
   },
-  // RL3: unlimited approvals and unattended transfers
+  // RL3: uncapped approvals and unattended transfers
   {
     rule: "RL3",
     severity: "fail",
     negatable: true,
-    re: /\b(?:unlimited|infinite|max(?:imum)?)\s+(?:token\s+)?(?:approval|allowance)s?\b/gi,
-    message: "solicits an unlimited approval"
+    re: rx(word2(`${alt("unlimited", "infinite", "max(?:imum)?")}${SP}${opt(`token${SP}`)}${alt("approval", "allowance")}s?`)),
+    message: "approval without a cap"
   },
   {
     rule: "RL3",
     severity: "fail",
     negatable: false,
-    re: /\b(?:MaxUint256|maxUint256|MAX_UINT256|MAX_UINT|type\(uint256\)\.max|constants\.MaxUint256|ethers\.MaxUint256|maxUint)\b|\b2\s*\*\*\s*256\s*-\s*1\b|\b0x[fF]{64}\b/g,
-    message: "unlimited (max-uint) amount literal"
+    re: rx(`${word2(alt("approve", "increaseAllowance", "setAllowance", "permit", "allowance"))}[^\\n]{0,120}?${MAX_LITERAL}`, "g"),
+    message: "approval amount set to the maximum integer"
   },
   {
     rule: "RL3",
     severity: "warn",
     negatable: true,
-    re: /\bsetApprovalForAll\s*\(/g,
-    message: "operator approval over every NFT/1155 the user holds; make sure the manifest declares the operator"
+    re: rx(String.raw`\bsetApprovalForAll\s*\(`, "g"),
+    message: "operator approval over every NFT of a collection; the manifest must declare the operator"
   },
   {
     rule: "RL3",
     severity: "warn",
     negatable: true,
-    re: /\b(?:setInterval|cron|schedule(?:d|r)?|every\s+\d+\s*(?:seconds?|minutes?|hours?|days?))\b[^\n]{0,80}\b(?:transfer|send|withdraw|sweep|collect)\b/gi,
-    message: "scheduled or recurring transfer"
+    re: rx(`${word2(alt("setInterval", "cron", "schedule(?:d|r)?", String.raw`every\s+\d+\s*(?:seconds?|minutes?|hours?|days?)`))}[^\\n]{0,80}${word2(alt("transfer", "send", "withdraw", "sweep", "collect"))}`),
+    message: "time-based movement of funds"
   },
-  // RL6: wallet secrets (requests, and code that reads the wallet's session store)
+  // RL6: wallet secrets (requests in prose; reads of the wallet's session store in code)
   {
     rule: "RL6",
     severity: "fail",
     negatable: true,
-    re: /\b(?:enter|paste|type|provide|send|share|give|input|reveal|export|tell\s+me|what\s+is)\s+(?:(?:me|us|it|the|your|its|this)\s+){0,2}(?:wallet\s+)?(?:seed\s*phrase|mnemonic|recovery\s+(?:phrase|words)|secret\s+(?:phrase|key|recovery)|private\s+key|api\s+secret|secret\s+key|1[28][\s-]*word)/gi,
-    message: "asks for a wallet secret"
+    re: rx(word2(`${alt(HAND_OVER, seq("what", "is"))}${SP}${SUBJECTS}${opt(`wallet${SP}`)}${alt(String.raw`seed\s*phrase`, "mnemonic", seq("recovery", alt("phrase", "words")), seq("secret", alt("phrase", "key", "recovery")), seq("private", "key"), seq("api", "secret"), `1[28]${joiner}word`)}`)),
+    message: "wallet secret requested"
   },
   {
     rule: "RL6",
     severity: "fail",
     negatable: false,
-    re: /(?:~|\$HOME|homedir\(\)|os\.homedir)[^\n]{0,40}\.baw\b|\bBINANCE_BAW_DIR\b|\bkeytar\b[^\n]{0,60}\bbaw\b/g,
-    message: "reads the Agentic Wallet's session store"
+    re: rx(`${alt("~", String.raw`\$HOME`, String.raw`homedir\(\)`, String.raw`os\.homedir`)}[^\\n]{0,40}\\.${"baw"}\\b|\\b${["BINANCE", "BAW", "DIR"].join("_")}\\b|\\bkeytar\\b[^\\n]{0,60}\\b${"baw"}\\b`, "g"),
+    message: "code reads the Agentic Wallet's session store"
   },
   // RL7: promised returns
   {
     rule: "RL7",
     severity: "fail",
     negatable: true,
-    re: /\b(?:passive\s+income|guaranteed\s+(?:returns?|profits?|yield|income|gains?)|risk[\s-]*free\s+(?:returns?|profits?|income|yield)|automatic\s+money[\s-]*making|money[\s-]*making\s+machine|get\s+rich|double\s+your\s+(?:money|crypto|funds)|100\s*%\s+(?:profit|win|guaranteed))\b/gi,
-    message: "promises returns"
+    re: rx(word2(alt(
+      seq("passive", "income"),
+      seq("guaranteed", alt("returns?", "profits?", "yield", "income", "gains?")),
+      seq(glued("risk", "free"), alt("returns?", "profits?", "income", "yield")),
+      seq("automatic", glued("money", "making")),
+      seq(glued("money", "making"), "machine"),
+      seq("get", "rich"),
+      seq("double", "your", alt("money", "crypto", "funds")),
+      seq(String.raw`100\s*%`, alt("profit", "win", "guaranteed"))
+    ))),
+    message: "promised returns"
   }
 ];
-var NEGATION_RE = /\b(?:never|not|no|don'?t|doesn'?t|won'?t|must\s+not|mustn'?t|cannot|can'?t|refuse|refuses|without\s+ever|forbid(?:den|s)?|prohibit(?:ed|s)?|rejects?|flags?|blocks?|detects?|warns?\s+(?:about|on))\b/i;
+var NEGATION_RE = rx(word2(alt("never", "not", "no", "don'?t", "doesn'?t", "won'?t", seq("must", "not"), "mustn'?t", "cannot", "can'?t", "refuses?", "forbid(?:den|s)?", "prohibit(?:ed|s)?")), "i");
 function isNegated(text, matchIndex) {
   const start = Math.max(0, matchIndex - 80);
   const prefix = text.slice(start, matchIndex);
@@ -21557,16 +21589,16 @@ var OFFICIAL_BRAND_HOSTS = [
   "binance.cloud",
   "bnbchain.org",
   "bnbchain.world",
-  "bscscan.com",
-  "bnbchain.io"
+  "bnbchain.io",
+  "bscscan.com"
 ];
 function isOfficialHost(host) {
   const h = host.toLowerCase().replace(/\.$/, "");
   return OFFICIAL_BRAND_HOSTS.some((o) => h === o || h.endsWith(`.${o}`));
 }
 var BRAND_RE = /binance|\bbnb|bnb(?=[^a-z]|$)/i;
-var TRADING_RE = /\b(?:swap|trade|trading|buy|sell|limit[\s-]+order|market[\s-]+order|prediction\s+market|leverage|perp(?:etual)?s?)\b/i;
-var RISK_WARNING_RE = /\b(?:risk|not\s+financial\s+advice|may\s+lose|could\s+lose|losses?|volatil)/i;
+var TRADING_RE = rx(word2(alt("swap", "trade", "trading", "buy", "sell", seq("limit", "order"), seq("market", "order"), seq("prediction", "market"), "leverage", "perp(?:etual)?s?")), "i");
+var RISK_WARNING_RE = rx(String.raw`\b(?:risk|not\s+financial\s+advice|may\s+lose|could\s+lose|losses?|volatil)`, "i");
 
 // ../redline/src/check.ts
 var RULESET = "countersign.redline/v1";
@@ -21580,6 +21612,8 @@ var WELL_KNOWN = {
   "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": "USDC",
   "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": "WBNB",
   "0x000000000022d473030f116ddee9f6b43ac78ba3": "Permit2",
+  "0xca11bde05977b3631167028862be2a173976ca11": "Multicall3 (same address on every EVM chain)",
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": "native-token placeholder (EIP-7528)",
   "0x000000000000000000000000000000000000dead": "burn address",
   [zeroAddress]: "zero address"
 };
@@ -21680,7 +21714,7 @@ function checkSkill(files, opts = {}) {
         file: f.path,
         line: lineOf(text, index2),
         snippet: snippetAt(text, index2, m[0].length),
-        message: `address ${getAddress(m[0])} is not declared in ${MANIFEST_FILE}`
+        message: `address ${getAddress(m[0])} is not declared in ${MANIFEST_FILE} (undeclared recipient or spender)`
       });
     }
     for (const m of text.matchAll(URL_HOST_RE)) {
@@ -21728,7 +21762,7 @@ function checkSkill(files, opts = {}) {
       file: "SKILL.md",
       line: 1,
       snippet: "",
-      message: "the skill trades but shows no risk warning"
+      message: "trading skill without a risk warning"
     });
   }
   let rulesChecked = 0;
