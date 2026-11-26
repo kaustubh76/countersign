@@ -1,0 +1,41 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: forge test
+        working-directory: contracts
+        run: forge test -vv
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.18.2 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: pnpm install --frozen-lockfile
+      - name: ABIs match the contracts
+        run: |
+          (cd contracts && forge build)
+          pnpm --filter @countersign/core sync-abis
+          git diff --exit-code packages/core/src/abi.ts
+      - run: pnpm -r typecheck
+      # includes: our own skill passes our own Red-Line Check, and the committed skill bundle is
+      # byte-identical to a fresh build
+      - run: pnpm -r test
+      - name: end-to-end on anvil
+        run: scripts/e2e-local.sh
+      - name: web build
+        run: pnpm --filter @countersign/web build
+        env: { NEXT_TELEMETRY_DISABLED: "1" }
