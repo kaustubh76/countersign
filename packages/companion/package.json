@@ -9,13 +9,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:skill": "node scripts/build-skill.mjs"
   },
   "dependencies": {
     "@countersign/core": "workspace:*",
-    "@countersign/redline": "workspace:*"
+    "@countersign/redline": "workspace:*",
+    "viem": "2.58.6"
   },
   "devDependencies": {
+    "@types/node": "22.20.7",
     "esbuild": "0.28.2"
   }
 }

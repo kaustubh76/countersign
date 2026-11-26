@@ -29,7 +29,13 @@ importers:
       '@countersign/redline':
         specifier: workspace:*
         version: link:../redline
+      viem:
+        specifier: 2.58.6
+        version: 2.58.6(typescript@5.9.3)
     devDependencies:
+      '@types/node':
+        specifier: 22.20.7
+        version: 22.20.7
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
