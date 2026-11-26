@@ -9,7 +9,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync-abis": "tsx scripts/sync-abis.ts"
   },
   "dependencies": {
     "viem": "2.58.6"
