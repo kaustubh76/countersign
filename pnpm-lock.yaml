@@ -45,6 +45,9 @@ importers:
       '@countersign/core':
         specifier: workspace:*
         version: link:../core
+      viem:
+        specifier: 2.58.6
+        version: 2.58.6(typescript@5.9.3)
 
 packages:
 

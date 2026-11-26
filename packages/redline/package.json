@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@countersign/core": "workspace:*"
+    "@countersign/core": "workspace:*",
+    "viem": "2.58.6"
   }
 }
