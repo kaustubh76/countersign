@@ -5,7 +5,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outfile = resolve(here, "../../../skills/countersign/scripts/countersign.mjs");
+const outArg = process.argv.indexOf("--outfile");
+const outfile = outArg !== -1 ? resolve(process.argv[outArg + 1]) : resolve(here, "../../../skills/countersign/scripts/countersign.mjs");
 
 await build({
   entryPoints: [resolve(here, "../src/cli.ts")],

@@ -1,0 +1,24 @@
+{
+  "schema": "countersign.manifest/v1",
+  "chainId": 56,
+  "publisher": "0xFcB663BaA6A05e2582975D97558B76f38791B24f",
+  "name": "countersign",
+  "targets": [
+    {
+      "address": "0x4bB4a3465925A0F4383Ddb774a8C92A9d3c8Ca56",
+      "label": "COUNTERSIGN SkillRegistry",
+      "anchor": true,
+      "functions": [
+        "register(bytes32,string,(address,address,uint96,uint8)[],(uint8,bytes4)[],(address,address,uint8,uint256)[])",
+        "endorseAnchor(bytes32,uint8)"
+      ]
+    },
+    {
+      "address": "0xDb1CC0e2F32b6B8C98553Af104e76dD1a184ce58",
+      "label": "COUNTERSIGN Countersign",
+      "functions": ["countersign(bytes32,bytes32[])", "report(bytes32,bytes32[])"]
+    }
+  ],
+  "flows": [],
+  "builtins": []
+}

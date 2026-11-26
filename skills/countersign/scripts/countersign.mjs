@@ -23390,7 +23390,7 @@ async function cmdCheckPreview(args) {
       reasons.push({ level: "warn", text: `allowance change in an unrecognised format: ${JSON.stringify(a).slice(0, 160)}` });
       continue;
     }
-    if (unlimited) reasons.push({ level: "block", text: `simulation shows an unlimited approval to ${spender}` });
+    if (unlimited) reasons.push({ level: "block", text: `simulation shows an approval with no cap to ${spender}` });
     const flow = m?.onchain.flows.find((f) => f.kind === 0 && isAddressEqual(f.token, token) && isAddressEqual(f.counterparty, spender));
     if (!flow) reasons.push({ level: "block", text: `simulation shows an approval to ${spender}, which the skill did not declare` });
     else if (typeof amount === "string" && /^[0-9]+$/.test(amount) && BigInt(amount) > flow.cap) {
