@@ -1,0 +1,30 @@
+# dependencies / build output
+node_modules/
+dist/
+coverage/
+.next/
+.vercel/
+*.tsbuildinfo
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+# deployment manifests are rewritten by every local/fork run; the README table is authoritative
+contracts/deployments/*.json
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# private working notes (strategy, research, outreach log) and the original ideation material
+notes/
+COUNTERSIGN-ideation.md
+COUNTERSIGN-architecture.excalidraw
+
+# os / editor
+.DS_Store
+*.log
+.idea/
+.vscode/
