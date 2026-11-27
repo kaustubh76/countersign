@@ -32,6 +32,11 @@
   - `/check`: GitHub folder, local folder (checked in the browser, never uploaded), and samples.
   - `/authors`: countersign.json builder. `/docs`: ruleset table and API.
   - The site's own copy passes our Red-Line Check, and the companion's `DEFAULT_API` points at the live domain.
+  - **Nov 27, "Notarized document" redesign** (user: too AI-looking, too much text).
+    - The hero is a paper certificate. "Send 1,000 bots" vs "Use it for real" both run the real verifier (`web/lib/duel.ts`).
+    - Condensed caps, mono type, stamps and ledgers.
+    - Words in `<main>`: `/` 1,001 → 246, `/try` 734 → 350, `/authors` 491 → 216.
+    - Every page fits 390 px.
 - [ ] **M5** Nov 27–Dec 6: genuine onboarding. Unique Agent ID gates: 10 by Dec 1, 20 by Dec 4, 30 by Dec 6.
 - [~] **M6** Dec 4–7.
   - [x] README, threat model, manifest spec and hash spec.
@@ -48,7 +53,7 @@
 export PATH="$HOME/.foundry/bin:$HOME/Library/pnpm:$PATH"
 (cd contracts && forge test)                                                  # 32 tests
 (cd contracts && RUN_FORK_TESTS=true forge test --match-path 'test/fork/*')   # real Agent ID on BSC
-pnpm -r test                                                                  # 113 tests (core 53, redline 23, web 33, companion 4)
+pnpm -r test                                                                  # 115 tests (core 53, redline 23, web 35, companion 4)
 scripts/e2e-local.sh                                                          # full flow on anvil
 ```
 
