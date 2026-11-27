@@ -1,33 +1,129 @@
+"use client";
+
 import Link from "next/link";
-import { SCENARIOS } from "@/lib/sim/scenarios";
+import { useEffect, useRef, useState } from "react";
+import { loadSim } from "@/lib/duel";
+import type { Outcome } from "@/lib/sim/scenarios";
 import { OUTCOME_STAMP, Stamp } from "./Stamp";
 
-const PICK = ["bot-farm", "friend", "borrow", "shared-token", "self", "smear"];
+export interface AttackRow {
+  id: string;
+  title: string;
+  why: string;
+}
 
-/** Six attacks as ledger rows, each stamped with what the real verifier decides (pinned by tests). */
-export function AttackLedger() {
-  const rows = PICK.map((id) => SCENARIOS.find((s) => s.id === id)!).filter(Boolean);
-  const fakes = SCENARIOS.filter((s) => s.group === "fake").length;
+interface Result {
+  outcome: Outcome;
+  line: string | null;
+  n: number;
+}
+
+/**
+ * Six attacks you can run right here. Each click runs the scenario through the real verifier and the
+ * Countersign.sol mirror (the playground's code); the stamp and the deciding check come back from it.
+ */
+export function AttackLedger({ rows, total }: { rows: AttackRow[]; total: number }) {
+  const [results, setResults] = useState<Record<string, Result>>({});
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [failed, setFailed] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const auto = useRef(false);
+  const runs = useRef(0);
+
+  async function run(id: string, expand: boolean) {
+    setBusy((b) => ({ ...b, [id]: true }));
+    try {
+      const sim = await loadSim();
+      const r = await sim.scenarioById(id)!.run();
+      const n = ++runs.current;
+      setResults((prev) => ({ ...prev, [id]: { outcome: r.outcome, line: sim.decisiveLine(r), n } }));
+      if (expand) setOpen(id);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy((b) => ({ ...b, [id]: false }));
+    }
+  }
+
+  // Run the first attack by itself once the ledger is on screen, so the first stamp lands unprompted.
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting) || auto.current) return;
+        auto.current = true;
+        io.disconnect();
+        setTimeout(() => void run(rows[0]!.id, true), 450);
+      },
+      { rootMargin: "0px 0px -35% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows]);
+
+  function runAll() {
+    rows.forEach((r, i) => {
+      if (!results[r.id]) setTimeout(() => void run(r.id, false), i * 350);
+    });
+  }
+
+  const tried = rows.filter((r) => results[r.id]).length;
+  const counted = rows.filter((r) => results[r.id]?.outcome === "counted").length;
+
   return (
-    <div className="ledger attacks">
-      {rows.map((s) => {
-        const st = OUTCOME_STAMP[s.expected];
+    <div className="ledger attacks" ref={box}>
+      {rows.map((row) => {
+        const res = results[row.id];
+        const st = res ? OUTCOME_STAMP[res.outcome] : null;
+        const isOpen = open === row.id && Boolean(res);
         return (
-          <Link key={s.id} href={`/try?s=${s.id}`} className="ledger-row">
-            <span className="k">{s.title}</span>
-            <span className="leader" />
-            <span className="why">{s.why}</span>
-            <Stamp kind={st.kind}>{st.label}</Stamp>
-          </Link>
+          <div key={row.id} className={`attack${isOpen ? " open" : ""}`}>
+            <button
+              type="button"
+              className="ledger-row"
+              aria-expanded={isOpen}
+              disabled={busy[row.id]}
+              onClick={() => (res && open === row.id ? setOpen(null) : void run(row.id, true))}
+            >
+              <span className="k">{row.title}</span>
+              <span className="leader" />
+              {res ? <span className="why">{row.why}</span> : null}
+              {st ? (
+                <Stamp key={res!.n} kind={st.kind} className="slam">
+                  {st.label}
+                </Stamp>
+              ) : (
+                <span className="try">{busy[row.id] ? "running" : "try"}</span>
+              )}
+            </button>
+            {isOpen ? (
+              <div className="attack-detail" aria-live="polite">
+                <span>
+                  <b className={st!.kind === "warn" ? "warn" : "bad"}>{st!.kind === "warn" ? "!" : "✗"}</b> {res!.line ?? "counted"}
+                </span>
+                <Link href={`/try?s=${row.id}`}>full case →</Link>
+              </div>
+            ) : null}
+          </div>
         );
       })}
-      <Link href="/try" className="ledger-row total">
+      <div className="ledger-row total">
         <span className="k">
-          {fakes} attacks · 0 counted
+          {failed ? "couldn't load the verifier" : `${tried}/${rows.length} tried · ${counted} counted`}
         </span>
         <span className="leader" />
-        <span className="why">play them all →</span>
-      </Link>
+        {tried < rows.length ? (
+          <button type="button" className="link" onClick={runAll}>
+            run all
+          </button>
+        ) : null}
+        <Link className="why" href="/try">
+          all {total} →
+        </Link>
+      </div>
     </div>
   );
 }

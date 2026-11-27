@@ -207,7 +207,7 @@ export function InkPad({ onStart, onSign, nudge, disabled }: { onStart: () => vo
             if (e.detail === 0) void playScribble();
           }}
         >
-          ✎ sign here
+          sign here
         </button>
       ) : null}
     </div>

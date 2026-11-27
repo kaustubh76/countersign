@@ -2,41 +2,31 @@ import Link from "next/link";
 import { checkSkill } from "@countersign/redline";
 import { AttackLedger } from "@/components/AttackLedger";
 import { CommandChip } from "@/components/CodeBlock";
-import { Flow } from "@/components/Flow";
 import { HeroDuel } from "@/components/HeroDuel";
+import { Receipt } from "@/components/Receipt";
+import { RedactedPage } from "@/components/RedactedPage";
 import { Stamp } from "@/components/Stamp";
-import { TypedTerminal, type TermLine } from "@/components/TypedTerminal";
 import { ATTACK_SAMPLE_NAME, attackSampleFiles } from "@/lib/attackSample";
 import { getIndex } from "@/lib/data";
+import { redact } from "@/lib/redaction";
 import { STATUS_LABELS } from "@/lib/reasons";
-import { scenarioById } from "@/lib/sim/scenarios";
+import { scenarioById, SCENARIOS } from "@/lib/sim/scenarios";
+import { receiptFrom } from "@/lib/sim/summary";
 import { INSTALL_CMD, REPO_URL, short } from "@/lib/site";
+import { verdictOf } from "@/lib/verdict";
 
 export const revalidate = 60;
 
-/** Short names for the findings summary (the full messages are on /check). */
-const RULE_SHORT: Record<string, string> = {
-  RL1: "pairing outside the official app",
-  RL2: "talks you out of confirming",
-  RL3: "uncapped approval, undeclared spender",
-  RL5: "brand impersonation",
-  RL6: "asks for wallet secrets",
-  RL7: "promises returns",
-  RL8: "no risk warning",
-};
+/** The six attacks the landing page lets you run inline (all eleven are on /try). */
+const LEDGER = ["bot-farm", "friend", "borrow", "shared-token", "self", "smear"];
 
 export default async function Home() {
   const index = await getIndex();
   const honest = await scenarioById("honest")!.run();
-  const report = checkSkill(attackSampleFiles());
-  const lines: TermLine[] = [{ text: `$ countersign check-install ./${ATTACK_SAMPLE_NAME}`, cls: "p" }];
-  for (const r of report.results) {
-    if (!r.findings.length) continue;
-    const f = r.findings[0]!;
-    const more = r.findings.length > 1 ? ` (+${r.findings.length - 1})` : "";
-    lines.push({ text: `${r.passed ? "!" : "✗"} ${r.rule}  ${RULE_SHORT[r.rule] ?? r.title}  ${f.file}:${f.line}${more}`, cls: r.passed ? "warn" : "bad" });
-  }
-  lines.push({ text: "verdict: BLOCK · not installed", cls: "bad" });
+  const sample = attackSampleFiles();
+  const report = checkSkill(sample);
+  const rows = LEDGER.map((id) => scenarioById(id)!).map((s) => ({ id: s.id, title: s.title, why: s.why }));
+  const fakes = SCENARIOS.filter((s) => s.group === "fake").length;
 
   return (
     <>
@@ -59,18 +49,15 @@ export default async function Home() {
 
       <section className="band">
         <div className="wrap">
-          <h2>How it can&apos;t be faked</h2>
-          <Flow />
+          <h2>Try to fake one</h2>
+          <AttackLedger rows={rows} total={fakes} />
         </div>
       </section>
 
       <section className="band">
-        <div className="wrap">
-          <div className="band-head">
-            <h2>Try to fake one</h2>
-            <span className="mono dim">every stamp is the real verifier&apos;s verdict</span>
-          </div>
-          <AttackLedger />
+        <div className="wrap split">
+          <h2>How it can&apos;t be faked</h2>
+          <Receipt r={receiptFrom(honest)} />
         </div>
       </section>
 
@@ -83,7 +70,7 @@ export default async function Home() {
               Full report
             </Link>
           </div>
-          <TypedTerminal label="check-install · summary" lines={lines} />
+          <RedactedPage files={redact(sample, report)} name={ATTACK_SAMPLE_NAME} verdict={verdictOf(report)} />
         </div>
       </section>
 
@@ -131,9 +118,7 @@ export default async function Home() {
             <div className="ledger">
               {[
                 ["Contracts on BNB Smart Chain", "launching", "seal"],
-                ["Verifier playground", "live", "ok"],
-                ["Red-Line Check", "live", "ok"],
-                ["countersign.json builder", "live", "ok"],
+                ["Playground, Red-Line Check, builder", "live", "ok"],
                 ["Companion skill v1.0.0", "live", "ok"],
               ].map(([k, v, c]) => (
                 <div key={k} className="ledger-row">

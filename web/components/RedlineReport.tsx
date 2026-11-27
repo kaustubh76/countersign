@@ -2,6 +2,7 @@
 
 import type { RedlineReport as Report } from "@countersign/redline";
 import { CopyButton } from "./CopyButton";
+import { verdictOf } from "@/lib/verdict";
 import { Stamp } from "./Stamp";
 
 export interface ManifestSummary {
@@ -21,14 +22,6 @@ export interface CheckView {
   manifestProblem: string | null;
   /** Hide finding snippets (used for the deliberately malicious sample). */
   redact?: boolean;
-}
-
-export function verdictOf(report: Report): { kind: "ok" | "bad" | "warn"; stamp: string; sub: string } {
-  const failed = report.results.filter((r) => !r.passed);
-  const warned = report.results.filter((r) => r.passed && r.findings.length > 0);
-  if (failed.length) return { kind: "bad", stamp: "Blocked", sub: `Fails ${failed.map((r) => r.rule).join(", ")}. The companion would refuse to install it.` };
-  if (warned.length) return { kind: "warn", stamp: "Passed", sub: `With an advisory: ${warned.map((r) => r.rule).join(", ")}.` };
-  return { kind: "ok", stamp: "Passed", sub: `All ${report.results.length} rules, no findings.` };
 }
 
 export function RedlineReportView({ view }: { view: CheckView }) {

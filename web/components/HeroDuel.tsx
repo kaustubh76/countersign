@@ -242,9 +242,7 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
                 <Rolling value={s.downloads} />
                 {motion
                   ? floaters.map((fl) => (
-                      <span key={fl.id} className="floater" style={{ right: `${(fl.id % 3) * 14 - 6}px` }} aria-hidden="true">
-                        +{fl.n}
-                      </span>
+                      <span key={fl.id} className="floater" data-n={`+${fl.n}`} style={{ right: `${(fl.id % 3) * 14 - 6}px` }} aria-hidden="true" />
                     ))
                   : null}
                 {struck ? <PenMark kind="strike" className="is-playing struck" /> : null}
@@ -311,7 +309,7 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
             {spoken(last, s)}
           </div>
         </div>
-        <p className="demo-note">Demo: made-up downloads. Every verdict is the real verifier on a simulated chain.</p>
+        <p className="demo-note">Demo: made-up downloads, real verifier, simulated chain.</p>
       </div>
     </div>
   );
