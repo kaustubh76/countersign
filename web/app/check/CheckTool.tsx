@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FLAG_ANCHOR, MANIFEST_FILE, parseManifest, type SkillFile } from "@countersign/core/browser";
 import { checkSkill, reportHash, type RedlineReport } from "@countersign/redline";
 import { RedlineReportView, type CheckView, type ManifestSummary } from "@/components/RedlineReport";
 import { Stamp } from "@/components/Stamp";
 import { ATTACK_SAMPLE_NAME, attackSampleFiles } from "@/lib/attackSample";
 import { filesFromDrop, filesFromInput } from "@/lib/localFiles";
+import { verdictOf } from "@/lib/verdict";
 
-type Tab = "github" | "local" | "samples";
+type Tab = "github" | "local";
 
 function summarize(files: SkillFile[]): { manifest: ManifestSummary | null; manifestProblem: string | null } {
   const f = files.find((x) => x.path === MANIFEST_FILE);
@@ -73,8 +74,9 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
     }
   }, []);
 
+  const sampleVerdict = useMemo(() => verdictOf(checkSkill(attackSampleFiles())), []);
+
   const runAttack = useCallback(() => {
-    setTab("samples");
     show(localView(attackSampleFiles(), `${ATTACK_SAMPLE_NAME} (deliberately malicious sample)`, "sample", true));
   }, []);
 
@@ -114,7 +116,6 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
           [
             ["github", "GitHub"],
             ["local", "Local folder"],
-            ["samples", "Samples"],
           ] as [Tab, string][]
         ).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
@@ -140,26 +141,11 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
               aria-label="Commit-pinned GitHub folder URL"
               required
             />
-            <button disabled={busy}>{busy ? "Checking…" : "Run check"}</button>
+            <button type="submit" className="btn seal" disabled={busy}>
+              {busy ? "Checking…" : "Run check"}
+            </button>
           </form>
-          <p className="mono-line">
-            pinned to a commit · read-only · nothing stored
-            {selfSkillUri ? (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  className="link"
-                  onClick={() => {
-                    setUri(selfSkillUri);
-                    void runGithub(selfSkillUri);
-                  }}
-                >
-                  try our own skill
-                </button>
-              </>
-            ) : null}
-          </p>
+          <p className="mono-line">pinned to a commit · read-only · nothing stored</p>
         </div>
       ) : null}
 
@@ -193,28 +179,30 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
         </label>
       ) : null}
 
-      {tab === "samples" ? (
-        <div className="samples">
-          <button type="button" className="sample" onClick={runAttack}>
-            <Stamp kind="bad">Malicious</Stamp>
-            <span className="cap">{ATTACK_SAMPLE_NAME}</span>
-            <span className="dim">&quot;4,000+ downloads&quot; · built in your browser, never installed</span>
+      {!view && !busy && !error ? (
+        <div className="ledger samples-ledger">
+          <button type="button" className="ledger-row" onClick={runAttack}>
+            <span className="k">{ATTACK_SAMPLE_NAME}</span>
+            <span className="why">&quot;4,000+ downloads&quot; · a planted sample</span>
+            <span className="leader" />
+            <Stamp kind={sampleVerdict.kind}>{sampleVerdict.stamp}</Stamp>
           </button>
-          <button
-            type="button"
-            className="sample"
-            disabled={!selfSkillUri}
-            onClick={() => {
-              if (!selfSkillUri) return;
-              setTab("github");
-              setUri(selfSkillUri);
-              void runGithub(selfSkillUri);
-            }}
-          >
-            <Stamp kind="ok">Real</Stamp>
-            <span className="cap">countersign</span>
-            <span className="dim">our own skill, from GitHub at this site&apos;s commit</span>
-          </button>
+          {selfSkillUri ? (
+            <button
+              type="button"
+              className="ledger-row"
+              onClick={() => {
+                setTab("github");
+                setUri(selfSkillUri);
+                void runGithub(selfSkillUri);
+              }}
+            >
+              <span className="k">countersign</span>
+              <span className="why">our own skill, this commit</span>
+              <span className="leader" />
+              <span className="try">run</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
 
