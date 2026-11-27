@@ -9,7 +9,8 @@ import { TypedTerminal, type TermLine } from "@/components/TypedTerminal";
 import { ATTACK_SAMPLE_NAME, attackSampleFiles } from "@/lib/attackSample";
 import { getIndex } from "@/lib/data";
 import { STATUS_LABELS } from "@/lib/reasons";
-import { INSTALL_CMD, REPO_URL } from "@/lib/site";
+import { scenarioById } from "@/lib/sim/scenarios";
+import { INSTALL_CMD, REPO_URL, short } from "@/lib/site";
 
 export const revalidate = 60;
 
@@ -26,6 +27,7 @@ const RULE_SHORT: Record<string, string> = {
 
 export default async function Home() {
   const index = await getIndex();
+  const honest = await scenarioById("honest")!.run();
   const report = checkSkill(attackSampleFiles());
   const lines: TermLine[] = [{ text: `$ countersign check-install ./${ATTACK_SAMPLE_NAME}`, cls: "p" }];
   for (const r of report.results) {
@@ -40,12 +42,15 @@ export default async function Home() {
     <>
       <section className="hero">
         <div className="wrap">
-          <HeroDuel>
-            <h1>
-              Bots can fake downloads. <span className="no">Not countersigns.</span>
-            </h1>
-            <p className="lede">A countersign needs a real Agent ID and its own on-chain session. Try to fake one.</p>
-          </HeroDuel>
+          <HeroDuel
+            title={
+              <h1>
+                Bots can fake downloads. <span className="no">Not countersigns.</span>
+              </h1>
+            }
+            lede={<p className="lede">A countersign needs a real Agent ID and its own on-chain session. Try to fake one.</p>}
+            versionLabel={short(honest.report.versionId)}
+          />
           <div className="hero-install">
             <CommandChip cmd={INSTALL_CMD} />
           </div>
