@@ -285,9 +285,9 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
                 )}
               </div>
               <div className="sig-cap">Countersigned by</div>
-              {motion && last?.kind === "bots" ? <BotSwarm key={scene} count={56} seed={scene * 7919 + 17} /> : null}
+              {motion && last?.kind === "bots" ? <BotSwarm key={`swarm-${scene}`} count={56} seed={scene * 7919 + 17} /> : null}
               {refusal ? (
-                <span key={scene} className={`stamp bad big refusal${last?.kind === "ink" ? " ink" : ""}`} style={t(last?.kind === "bots" && motion ? T.swarm : 0)}>
+                <span key={`stamp-${scene}`} className={`stamp bad big refusal${last?.kind === "ink" ? " ink" : ""}`} style={t(last?.kind === "bots" && motion ? T.swarm : 0)}>
                   {refusal}
                 </span>
               ) : null}

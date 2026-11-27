@@ -22,7 +22,7 @@ export const viewport: Viewport = { themeColor: "#0d0d0c", colorScheme: "dark" }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${plexMono.variable} ${signature.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${archivo.variable} ${plexMono.variable} ${signature.variable}`}>
       <body>
         <Ticker />
         <header className="site">
