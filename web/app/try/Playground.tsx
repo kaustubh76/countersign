@@ -5,6 +5,7 @@ import { OUTCOME_STAMP, Stamp } from "@/components/Stamp";
 import { badgeSvg } from "@/lib/badge";
 import { REASON_TEXT, SCENARIOS, type Scenario, type ScenarioResult, type TraceStep } from "@/lib/sim/scenarios";
 import { ACTORS, ago, FN_NAMES, labelOf } from "@/lib/sim/world";
+import { scoreLine } from "@/lib/score";
 import { SITE_URL } from "@/lib/site";
 
 const GROUPS: { key: Scenario["group"]; title: string }[] = [
@@ -115,7 +116,7 @@ export function Playground() {
         n += 1;
         setRevealed(n);
         if (n >= total && timer.current) clearInterval(timer.current);
-      }, 230);
+      }, 120);
     }
     if (scroll && caseRef.current) {
       const top = caseRef.current.getBoundingClientRect().top;
@@ -134,8 +135,7 @@ export function Playground() {
   const fakes = SCENARIOS.filter((s) => s.group === "fake");
   const tried = fakes.filter((s) => results[s.id]).length;
   const fakeCounted = fakes.filter((s) => results[s.id]?.outcome === "counted").length;
-  const shareText = `I tried ${tried} ways to fake proof of use on COUNTERSIGN. ${fakeCounted} got counted.`;
-  const shareUrl = `https://x.com/intent/post?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(`${SITE_URL}/try`)}`;
+  const shareUrl = `https://x.com/intent/post?text=${encodeURIComponent(scoreLine(tried, fakes.length))}&url=${encodeURIComponent(`${SITE_URL}/r/${tried}`)}`;
   const verdictShown = Boolean(result) && revealed > (result?.steps.length ?? 0);
   const stamp = result ? OUTCOME_STAMP[result.outcome] : null;
   const index = SCENARIOS.findIndex((s) => s.id === scenario.id);
@@ -144,19 +144,53 @@ export function Playground() {
 
   return (
     <div className="wrap">
-      <div className="scorebar">
-        <div className="score">
-          <b>{tried}</b>/{fakes.length} fakes tried
+      <div className="paper punch">
+        <div className="punch-head">
+          <span>Fakes tried</span>
+          <span>
+            {tried}/{fakes.length}
+          </span>
         </div>
-        <div className="score">
-          <b className={fakeCounted ? "bad" : "ok"}>{fakeCounted}</b> counted
+        <div className="punch-body">
+          <div className="punch-slots">
+            {fakes.map((s) => {
+              const r = results[s.id];
+              const st = r ? OUTCOME_STAMP[r.outcome] : null;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`slot${s.id === selected ? " on" : ""}${st ? ` done ${st.kind}` : ""}`}
+                  onClick={() => void run(s.id, true)}
+                  aria-label={`${s.title}${st ? `: ${st.label}` : ""}`}
+                  title={s.title}
+                >
+                  <span className="slot-n" aria-hidden="true" />
+                  {st ? (
+                    <Stamp kind={st.kind} className="slam">
+                      {st.label}
+                    </Stamp>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="punch-side">
+            <div className="punch-count">
+              <b className={fakeCounted ? "bad" : "ok"}>{fakeCounted}</b> counted
+            </div>
+            {result ? <img src={badgeUri(result.report)} alt="dca-planner's badge" height={20} /> : null}
+            {tried >= 3 ? (
+              <a className="textlink" href={shareUrl} target="_blank" rel="noreferrer">
+                Share ↗
+              </a>
+            ) : null}
+          </div>
         </div>
-        <div className="score">{result ? <img src={badgeUri(result.report)} alt="dca-planner's badge" height={20} /> : null}</div>
-        <div className="spacer" />
-        {tried >= 3 ? (
-          <a className="textlink" href={shareUrl} target="_blank" rel="noreferrer">
-            Share your score ↗
-          </a>
+        {tried === fakes.length ? (
+          <Stamp kind={fakeCounted ? "bad" : "ok"} big className="punch-done slam">
+            {tried} tried · {fakeCounted} counted
+          </Stamp>
         ) : null}
       </div>
 
@@ -197,12 +231,6 @@ export function Playground() {
             </div>
             <p className="case-attempt">{scenario.attempt}</p>
 
-            <div className="sub">On the simulated chain</div>
-            {result ? <TxTable rows={result.txs} /> : <p className="td">Running…</p>}
-
-            <div className="sub">The real verifier</div>
-            {result ? <Trace steps={result.steps} revealed={revealed} /> : null}
-
             <div className={`verdict ${verdictShown ? "shown" : ""}`} aria-live="polite">
               {result && stamp ? (
                 <>
@@ -210,14 +238,22 @@ export function Playground() {
                     {result.revert ? `${stamp.label} · ${result.revert.error}` : stamp.label}
                   </Stamp>
                   <p className="lesson">{scenario.lesson}</p>
-                  <div className="meta">
-                    <img src={badgeUri(result.report)} alt="" height={20} />
-                    {result.report.countersigns.counted} counted · {result.report.claims.total} claims · {result.report.incidents.length} incidents
-                  </div>
                 </>
               ) : null}
             </div>
 
+            <div className="sub">The real verifier</div>
+            {result ? <Trace steps={result.steps} revealed={revealed} /> : <p className="td">Running…</p>}
+
+            <div className="sub">On the simulated chain</div>
+            {result ? <TxTable rows={result.txs} /> : null}
+
+            {result ? (
+              <div className="case-meta">
+                <img src={badgeUri(result.report)} alt="" height={20} />
+                {result.report.countersigns.counted} counted · {result.report.claims.total} claims · {result.report.incidents.length} incidents
+              </div>
+            ) : null}
             <div className="case-actions">
               <button type="button" className="btn line sm" disabled={busy} onClick={() => void run(scenario.id)}>
                 Run again

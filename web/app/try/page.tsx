@@ -10,10 +10,9 @@ export const metadata: Metadata = {
 export default function TryPage() {
   return (
     <>
-      <section className="page-head">
+      <section className="page-head compact">
         <div className="wrap">
           <h1>Try to fake one.</h1>
-          <p className="mono-line">11 attacks · the real verifier · a simulated chain · runs in your browser</p>
         </div>
       </section>
       <Playground />
