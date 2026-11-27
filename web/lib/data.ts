@@ -32,7 +32,7 @@ export function deployment(): Deployment | null {
 }
 
 let readerSingleton: ChainReader | null = null;
-function reader(): ChainReader {
+export function reader(): ChainReader {
   readerSingleton ??= createReader({ chainId: chainId(), rpcUrls: rpcUrlsFromEnv() });
   return readerSingleton;
 }

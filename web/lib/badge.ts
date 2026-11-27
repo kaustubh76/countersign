@@ -1,4 +1,9 @@
-import type { VersionSummary } from "./data";
+/** What a badge needs: the API passes a VersionSummary, the playground a simulated report. */
+export interface BadgeInput {
+  counted: number;
+  incidents: number;
+  status: string;
+}
 
 const COLORS = {
   ok: "#1a7f37",
@@ -17,7 +22,7 @@ function textWidth(s: string): number {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export function badgeSvg(v: VersionSummary | null): string {
+export function badgeSvg(v: BadgeInput | null): string {
   const left = "countersign";
   let right: string;
   let color: string;

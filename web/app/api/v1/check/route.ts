@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchGithubSkill, hashSkillFiles, MANIFEST_FILE, parseManifest } from "@countersign/core";
+import { FLAG_ANCHOR, fetchGithubSkill, hashSkillFiles, MANIFEST_FILE, parseManifest } from "@countersign/core";
 import { checkSkill, reportHash } from "@countersign/redline";
 
 export const runtime = "nodejs";
@@ -33,12 +33,18 @@ export async function POST(req: Request) {
     const { contentHash } = hashSkillFiles(files);
     const report = checkSkill(files);
     const manifestFile = files.find((f) => f.path === MANIFEST_FILE);
-    let manifest: { manifestHash: string; publisher: string; targets: number; flows: number } | null = null;
+    let manifest: { manifestHash: string; publisher: string; targets: number; flows: number; anchors: number } | null = null;
     let manifestProblem: string | null = null;
     if (manifestFile) {
       try {
         const m = parseManifest(JSON.parse(new TextDecoder().decode(manifestFile.bytes)));
-        manifest = { manifestHash: m.manifestHash, publisher: m.publisher, targets: m.onchain.targets.length, flows: m.onchain.flows.length };
+        manifest = {
+          manifestHash: m.manifestHash,
+          publisher: m.publisher,
+          targets: m.onchain.targets.length,
+          flows: m.onchain.flows.length,
+          anchors: m.onchain.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0).length,
+        };
       } catch (e) {
         manifestProblem = (e as Error).message;
       }

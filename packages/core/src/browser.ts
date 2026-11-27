@@ -8,3 +8,5 @@ export * from "./constants.js";
 export * from "./manifest.js";
 export * from "./skillHash.js";
 export * from "./verifier.js";
+// Type-only (erased at build), so the views module and its ABI never reach a browser bundle.
+export type { AttestationView, OnchainTarget, RecordView, VersionView } from "./views.js";
