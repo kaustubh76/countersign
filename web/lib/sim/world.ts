@@ -56,12 +56,12 @@ export const CONTRACTS = {
 };
 
 export const LABELS: Record<string, string> = {
-  [CONTRACTS.vault]: "the author's vault",
-  [CONTRACTS.token]: "a shared stablecoin",
-  [CONTRACTS.nft]: "an unrelated NFT mint",
-  [CONTRACTS.stranger]: "an unknown address",
-  [CONTRACTS.impl]: "the declared implementation",
-  [CONTRACTS.evilImpl]: "a new, undeclared implementation",
+  [CONTRACTS.vault]: "author's vault",
+  [CONTRACTS.token]: "shared token",
+  [CONTRACTS.nft]: "NFT mint",
+  [CONTRACTS.stranger]: "stranger",
+  [CONTRACTS.impl]: "declared code",
+  [CONTRACTS.evilImpl]: "new code",
   ...Object.fromEntries(Object.values(ACTORS).map((a) => [a.address, a.name])),
 };
 export const labelOf = (a: string) => LABELS[a.toLowerCase()] ?? `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -240,7 +240,7 @@ export function approveTx(chain: SimChain, from: Actor, spender: Address, value:
     input: (FN.approve + spender.slice(2).padStart(64, "0") + value.toString(16).padStart(64, "0")) as Hex,
     block,
     logs: [{ address: CONTRACTS.token, topics: [TOPIC_APPROVAL, topic(from.address), topic(spender)], data: amount(value) }],
-    effects: [`approves ${shown} of the stablecoin to ${labelOf(spender)}`],
+    effects: [`approve ${shown} → ${labelOf(spender)}`],
   });
 }
 
@@ -252,7 +252,7 @@ export function depositTx(chain: SimChain, from: Actor, value: bigint, block?: b
     input: FN.deposit,
     block,
     logs: [{ address: CONTRACTS.token, topics: [TOPIC_TRANSFER, topic(from.address), topic(CONTRACTS.vault)], data: amount(value) }],
-    effects: [`deposits ${value / UNIT} USD into the vault`],
+    effects: [`deposit ${value / UNIT} USD`],
   });
 }
 

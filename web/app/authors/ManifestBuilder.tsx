@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { BSC_CHAIN_ID, BUILTIN_ACTIONS, FLAG_ANCHOR, MANIFEST_SCHEMA, ManifestError, parseManifest, selectorOf, type ManifestJson } from "@countersign/core/browser";
 import { CopyButton } from "@/components/CopyButton";
+import { Stamp } from "@/components/Stamp";
 
 interface TargetRow {
   address: string;
@@ -95,39 +96,39 @@ export function ManifestBuilder() {
 
   return (
     <div className="mb">
-      <div className="mb-form card">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>countersign.json</h3>
-          <div className="row tight">
-            <button type="button" className="ghost small" onClick={() => setS(EXAMPLE)}>
-              Load an example
+      <div className="mb-form">
+        <div className="mb-head">
+          <span>Your skill</span>
+          <span className="pair-btns">
+            <button type="button" className="btn line sm" onClick={() => setS(EXAMPLE)}>
+              Example
             </button>
-            <button type="button" className="ghost small" onClick={() => setS(INITIAL)}>
+            <button type="button" className="btn line sm" onClick={() => setS(INITIAL)}>
               Clear
             </button>
-          </div>
+          </span>
         </div>
-        <div className="grid two" style={{ gap: 12 }}>
+        <div className="pair">
           <label className="field">
-            Publisher: your Agent ID wallet
+            Publisher (your Agent ID wallet)
             <input className="mono" value={s.publisher} placeholder="0x…" spellCheck={false} onChange={(e) => setS({ ...s, publisher: e.target.value })} />
           </label>
           <label className="field">
-            Skill name (optional)
+            Skill name
             <input value={s.name} placeholder="my-skill" onChange={(e) => setS({ ...s, name: e.target.value })} />
           </label>
         </div>
 
         <div className="mb-section">
           <div className="mb-head">
-            <span>Contracts the skill calls</span>
-            <button type="button" className="ghost small" onClick={() => setS({ ...s, targets: [...s.targets, emptyTarget()] })} disabled={s.targets.length >= 16}>
+            <span>Contracts it calls</span>
+            <button type="button" className="btn line sm" onClick={() => setS({ ...s, targets: [...s.targets, emptyTarget()] })} disabled={s.targets.length >= 16}>
               + contract
             </button>
           </div>
           {s.targets.map((t, i) => (
             <div key={i} className="mb-row">
-              <div className="grid two" style={{ gap: 10 }}>
+              <div className="pair">
                 <label className="field">
                   Address
                   <input className="mono" value={t.address} placeholder="0x…" spellCheck={false} onChange={(e) => setT(i, { address: e.target.value })} />
@@ -138,26 +139,26 @@ export function ManifestBuilder() {
                 </label>
               </div>
               <label className="field">
-                Functions the skill may call, one per line
+                Functions, one per line
                 <textarea className="mono" rows={2} value={t.functions} placeholder={"deposit(uint256)\nwithdraw(uint256)"} spellCheck={false} onChange={(e) => setT(i, { functions: e.target.value })} />
               </label>
-              <div className="row tight mb-flags">
+              <div className="mb-flags">
                 <label className="check-label">
-                  <input type="checkbox" checked={t.anchor} onChange={(e) => setT(i, { anchor: e.target.checked })} /> anchor (a contract you own)
+                  <input type="checkbox" checked={t.anchor} onChange={(e) => setT(i, { anchor: e.target.checked })} /> anchor (you own it)
                 </label>
                 <label className="check-label">
                   <input type="checkbox" checked={t.pull} onChange={(e) => setT(i, { pull: e.target.checked })} /> may pull approved tokens
                 </label>
                 <label className="field inline">
-                  max BNB per call (wei)
-                  <input className="mono" value={t.maxValueWei} onChange={(e) => setT(i, { maxValueWei: e.target.value })} style={{ width: 150 }} />
+                  max wei
+                  <input className="mono" value={t.maxValueWei} onChange={(e) => setT(i, { maxValueWei: e.target.value })} style={{ width: 120 }} />
                 </label>
                 <label className="field inline">
-                  proxy implementation
-                  <input className="mono" value={t.impl} placeholder="none" onChange={(e) => setT(i, { impl: e.target.value })} style={{ width: 170 }} />
+                  proxy impl
+                  <input className="mono" value={t.impl} placeholder="none" onChange={(e) => setT(i, { impl: e.target.value })} style={{ width: 150 }} />
                 </label>
                 {s.targets.length > 1 ? (
-                  <button type="button" className="link tiny" onClick={() => setS({ ...s, targets: s.targets.filter((_, j) => j !== i) })}>
+                  <button type="button" className="link" onClick={() => setS({ ...s, targets: s.targets.filter((_, j) => j !== i) })}>
                     remove
                   </button>
                 ) : null}
@@ -168,24 +169,23 @@ export function ManifestBuilder() {
 
         <div className="mb-section">
           <div className="mb-head">
-            <span>Approvals and transfers (each with a cap)</span>
-            <button type="button" className="ghost small" onClick={() => setS({ ...s, flows: [...s.flows, emptyFlow()] })} disabled={s.flows.length >= 32}>
+            <span>Approvals and transfers, capped</span>
+            <button type="button" className="btn line sm" onClick={() => setS({ ...s, flows: [...s.flows, emptyFlow()] })} disabled={s.flows.length >= 32}>
               + flow
             </button>
           </div>
-          {s.flows.length === 0 ? <p className="tiny faint">None. Add one for every token approval or direct transfer the skill makes.</p> : null}
           {s.flows.map((f, i) => (
             <div key={i} className="mb-row">
-              <div className="grid two" style={{ gap: 10 }}>
+              <div className="pair">
                 <label className="field">
                   Kind
                   <select value={f.kind} onChange={(e) => setF(i, { kind: e.target.value as FlowRow["kind"] })}>
-                    <option value="approve">approve (spender)</option>
-                    <option value="transfer">transfer (recipient)</option>
+                    <option value="approve">approve</option>
+                    <option value="transfer">transfer</option>
                   </select>
                 </label>
                 <label className="field">
-                  Token address (or &quot;native&quot; for BNB transfers)
+                  Token (or &quot;native&quot;)
                   <input className="mono" value={f.token} placeholder="0x…" spellCheck={false} onChange={(e) => setF(i, { token: e.target.value })} />
                 </label>
                 <label className="field">
@@ -193,11 +193,11 @@ export function ManifestBuilder() {
                   <input className="mono" value={f.counterparty} placeholder="0x…" spellCheck={false} onChange={(e) => setF(i, { counterparty: e.target.value })} />
                 </label>
                 <label className="field">
-                  Cap, in the token&apos;s base units (never unlimited)
+                  Cap (base units, never unlimited)
                   <input className="mono" value={f.cap} placeholder="100000000000000000000" onChange={(e) => setF(i, { cap: e.target.value })} />
                 </label>
               </div>
-              <button type="button" className="link tiny" onClick={() => setS({ ...s, flows: s.flows.filter((_, j) => j !== i) })}>
+              <button type="button" className="link" onClick={() => setS({ ...s, flows: s.flows.filter((_, j) => j !== i) })}>
                 remove
               </button>
             </div>
@@ -206,9 +206,9 @@ export function ManifestBuilder() {
 
         <div className="mb-section">
           <div className="mb-head">
-            <span>Built-in wallet actions used (informational)</span>
+            <span>Built-in wallet actions</span>
           </div>
-          <div className="row tight">
+          <div className="mb-flags">
             {BUILTIN_ACTIONS.map((b) => (
               <label key={b} className="check-label">
                 <input
@@ -224,28 +224,29 @@ export function ManifestBuilder() {
       </div>
 
       <div className="mb-out">
-        <div className={`verdict shown ${result.ok ? (result.anchors ? "ok" : "warn") : "bad"}`}>
-          <div className="verdict-line" style={{ fontSize: "1.3rem" }}>
-            <span className="vi">{result.ok ? (result.anchors ? "✓" : "!") : "✗"}</span>
-            {result.ok ? (result.anchors ? "Valid manifest" : "Valid, but no anchor yet") : "Not valid yet"}
+        <div className="paper">
+          <div className="mb-status">
+            {s === INITIAL ? (
+              <Stamp kind="idle" big>
+                Draft
+              </Stamp>
+            ) : (
+              <Stamp kind={result.ok ? (result.anchors ? "ok" : "warn") : "bad"} big>
+                {result.ok ? (result.anchors ? "Valid" : "No anchor") : "Invalid"}
+              </Stamp>
+            )}
           </div>
-          {result.ok ? (
-            <div className="small" style={{ marginTop: 8 }}>
-              <div className="muted">manifestHash (what SkillRegistry will store)</div>
+          {s === INITIAL ? (
+            <p className="small">Fill in the form, or load the example.</p>
+          ) : result.ok ? (
+            <>
+              <div className="sig-cap">manifestHash, as SkillRegistry stores it</div>
               <div className="hash">{result.hash}</div>
-              {!result.anchors ? (
-                <p className="muted" style={{ margin: "8px 0 0" }}>
-                  Mark a contract you own as the anchor. Countersigns must cite a transaction to it, or none will count.
-                </p>
-              ) : (
-                <p className="muted" style={{ margin: "8px 0 0" }}>
-                  An anchor whose <code>owner()</code> is your publisher wallet is endorsed automatically when you register.
-                </p>
-              )}
-            </div>
+              {!result.anchors ? <p className="small">Mark a contract you own as the anchor, or no countersign can count.</p> : null}
+            </>
           ) : (
-            <ul className="reasons small">
-              {result.problems.slice(0, 8).map((p) => (
+            <ul>
+              {result.problems.slice(0, 6).map((p) => (
                 <li key={p}>{p}</li>
               ))}
             </ul>
@@ -254,7 +255,7 @@ export function ManifestBuilder() {
         <div className="code" style={{ marginTop: 14 }}>
           <div className="code-head">
             <span>countersign.json</span>
-            <div className="row tight">
+            <span className="pair-btns">
               <CopyButton text={text} />
               <button
                 type="button"
@@ -270,15 +271,10 @@ export function ManifestBuilder() {
               >
                 download
               </button>
-            </div>
+            </span>
           </div>
-          <pre className="bare mb-json">{text}</pre>
+          <pre className="mb-json">{text}</pre>
         </div>
-        {result.ok && result.selectors.length ? (
-          <p className="tiny faint" style={{ marginTop: 10 }}>
-            Selectors: {result.selectors.map((x) => `${x.fn} → ${x.sel}`).join(" · ")}
-          </p>
-        ) : null}
       </div>
     </div>
   );

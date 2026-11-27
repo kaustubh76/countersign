@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const LINKS = [
-  { href: "/try", label: "Try to fake it" },
-  { href: "/check", label: "Red-Line Check" },
-  { href: "/authors", label: "For authors" },
-  { href: "/docs", label: "Docs & API" },
+  { href: "/try", label: "Play" },
+  { href: "/check", label: "Check" },
+  { href: "/authors", label: "Authors" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function Nav({ repo }: { repo: string }) {
@@ -26,7 +26,7 @@ export function Nav({ repo }: { repo: string }) {
             {l.label}
           </Link>
         ))}
-        <a className="gh" href={repo} rel="noreferrer">
+        <a href={repo} rel="noreferrer">
           GitHub ↗
         </a>
       </nav>

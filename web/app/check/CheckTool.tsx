@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FLAG_ANCHOR, MANIFEST_FILE, parseManifest, type SkillFile } from "@countersign/core/browser";
 import { checkSkill, reportHash, type RedlineReport } from "@countersign/redline";
 import { RedlineReportView, type CheckView, type ManifestSummary } from "@/components/RedlineReport";
+import { Stamp } from "@/components/Stamp";
 import { ATTACK_SAMPLE_NAME, attackSampleFiles } from "@/lib/attackSample";
 import { filesFromDrop, filesFromInput } from "@/lib/localFiles";
 
@@ -11,7 +12,7 @@ type Tab = "github" | "local" | "samples";
 
 function summarize(files: SkillFile[]): { manifest: ManifestSummary | null; manifestProblem: string | null } {
   const f = files.find((x) => x.path === MANIFEST_FILE);
-  if (!f) return { manifest: null, manifestProblem: `no ${MANIFEST_FILE} in the skill folder (needed to register; see For authors)` };
+  if (!f) return { manifest: null, manifestProblem: `no ${MANIFEST_FILE} (needed to register)` };
   try {
     const m = parseManifest(JSON.parse(new TextDecoder().decode(f.bytes)));
     return {
@@ -111,7 +112,7 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
       <div className="tabs" role="tablist" aria-label="What to check">
         {(
           [
-            ["github", "GitHub folder"],
+            ["github", "GitHub"],
             ["local", "Local folder"],
             ["samples", "Samples"],
           ] as [Tab, string][]
@@ -123,7 +124,7 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
       </div>
 
       {tab === "github" ? (
-        <div className="card flat check-panel">
+        <div className="check-panel">
           <form
             className="check"
             onSubmit={(e) => {
@@ -141,21 +142,20 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
             />
             <button disabled={busy}>{busy ? "Checking…" : "Run check"}</button>
           </form>
-          <p className="tiny faint" style={{ margin: "10px 0 0" }}>
-            The folder must be pinned to a commit (the same form <code>countersign register --uri</code> takes), so the result
-            is reproducible. Read-only: nothing is stored.
+          <p className="mono-line">
+            pinned to a commit · read-only · nothing stored
             {selfSkillUri ? (
               <>
-                {" "}
+                {" · "}
                 <button
                   type="button"
-                  className="link tiny"
+                  className="link"
                   onClick={() => {
                     setUri(selfSkillUri);
                     void runGithub(selfSkillUri);
                   }}
                 >
-                  Try it on COUNTERSIGN&apos;s own skill
+                  try our own skill
                 </button>
               </>
             ) : null}
@@ -164,8 +164,8 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
       ) : null}
 
       {tab === "local" ? (
-        <div
-          className={`card flat check-panel dropzone ${drag ? "drag" : ""}`}
+        <label
+          className={`paper dropzone ${drag ? "drag" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
             setDrag(true);
@@ -178,46 +178,31 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
             void onLocal(() => filesFromDrop(items), "a dropped folder");
           }}
         >
-          <div className="drop-icon" aria-hidden="true">
-            ⇣
-          </div>
-          <p style={{ margin: "6px 0" }}>
-            <strong>Drop your skill folder here</strong> (the one with <code>SKILL.md</code>), or
-          </p>
-          <label className="btn ghost small" style={{ cursor: "pointer" }}>
-            Choose a folder
-            <input
-              ref={folderInput}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                const list = e.target.files;
-                if (list?.length) void onLocal(() => filesFromInput(list), list[0]!.webkitRelativePath.split("/")[0] || "a local folder");
-              }}
-            />
-          </label>
-          <p className="tiny faint" style={{ marginTop: 12 }}>
-            Hashed and checked in this browser tab with the same code as the CLI. Your files are never uploaded. Up to 2,000 files
-            / 25 MB; <code>.git</code>, <code>node_modules</code> and <code>.DS_Store</code> are skipped, as in the content-hash spec.
-          </p>
-        </div>
+          <span className="cap">Drop a skill folder</span>
+          <p>or click to choose one · checked in this tab, never uploaded</p>
+          <input
+            ref={folderInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const list = e.target.files;
+              if (list?.length) void onLocal(() => filesFromInput(list), list[0]!.webkitRelativePath.split("/")[0] || "a local folder");
+            }}
+          />
+        </label>
       ) : null}
 
       {tab === "samples" ? (
-        <div className="grid two">
-          <button type="button" className="sample-card bad" onClick={runAttack}>
-            <span className="pill bad">malicious sample</span>
-            <span className="sample-title">{ATTACK_SAMPLE_NAME}</span>
-            <span className="sample-desc">
-              &quot;Fastest swaps, 4,000+ downloads.&quot; Two red lines in two files: it talks the user out of confirming, and its
-              script grants a token permission to an address it never declared. Built in your browser, never installed.
-            </span>
-            <span className="sample-go">Run the check →</span>
+        <div className="samples">
+          <button type="button" className="sample" onClick={runAttack}>
+            <Stamp kind="bad">Malicious</Stamp>
+            <span className="cap">{ATTACK_SAMPLE_NAME}</span>
+            <span className="dim">&quot;4,000+ downloads&quot; · built in your browser, never installed</span>
           </button>
           <button
             type="button"
-            className="sample-card ok"
+            className="sample"
             disabled={!selfSkillUri}
             onClick={() => {
               if (!selfSkillUri) return;
@@ -226,19 +211,15 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
               void runGithub(selfSkillUri);
             }}
           >
-            <span className="pill ok">real skill</span>
-            <span className="sample-title">countersign (our own companion skill)</span>
-            <span className="sample-desc">
-              The skill this site ships, fetched from GitHub at the exact commit this site was built from. It passes its own
-              check without exempting itself.
-            </span>
-            <span className="sample-go">{selfSkillUri ? "Run the check →" : "available on the deployed site"}</span>
+            <Stamp kind="ok">Real</Stamp>
+            <span className="cap">countersign</span>
+            <span className="dim">our own skill, from GitHub at this site&apos;s commit</span>
           </button>
         </div>
       ) : null}
 
       <div ref={resultRef} style={{ scrollMarginTop: 90 }}>
-        {busy ? <p className="muted" style={{ marginTop: 24 }}>Checking…</p> : null}
+        {busy ? <p className="mono-line">checking…</p> : null}
         {error ? <p className="notice bad">{error}</p> : null}
         {view ? <RedlineReportView view={view} /> : null}
       </div>

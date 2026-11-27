@@ -25,14 +25,14 @@ export interface Revert {
 }
 
 export const REVERT_WHY: Record<RevertName, string> = {
-  UnknownVersion: "that skill version was never registered",
-  NotAgentIdHolder: "handleOf(sender) is empty: this wallet holds no Agent ID, so it cannot countersign anything",
-  SelfCountersign: "the author's own wallet (or Agent ID) cannot countersign the author's skill",
-  AlreadyCountersigned: "this Agent ID already countersigned this version; it gets one countersign per version",
-  BadTxCount: "a countersign must cite between 1 and 8 session transactions",
-  ZeroTxHash: "a cited transaction hash is empty",
-  DuplicateTxHash: "the same transaction is cited twice",
-  TxAlreadyUsed: "this Agent ID already cited that transaction in an earlier countersign; each one counts once",
+  UnknownVersion: "version not registered",
+  NotAgentIdHolder: "this wallet holds no Agent ID",
+  SelfCountersign: "the author can't countersign their own skill",
+  AlreadyCountersigned: "this Agent ID already countersigned this version",
+  BadTxCount: "cite 1 to 8 transactions",
+  ZeroTxHash: "empty transaction hash",
+  DuplicateTxHash: "the same transaction cited twice",
+  TxAlreadyUsed: "this Agent ID already used that transaction",
 };
 
 const ZERO = `0x${"0".repeat(64)}`;

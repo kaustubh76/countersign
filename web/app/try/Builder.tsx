@@ -1,68 +1,76 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { OUTCOME_STAMP, Stamp } from "@/components/Stamp";
 import { DEFAULT_BUILDER, runBuilder, type BuilderOptions, type ScenarioResult } from "@/lib/sim/scenarios";
-import { badgeUri, Trace, TxTable, VERDICT } from "./Playground";
+import { badgeUri, Trace } from "./Playground";
 
-type Choice<K extends keyof BuilderOptions> = { value: BuilderOptions[K]; label: string };
+type Choice = { value: string; label: string };
 
-const CONTROLS: { [K in keyof BuilderOptions]: { label: string; choices: Choice<K>[] } } = {
-  signer: {
+const CONTROLS: { key: keyof BuilderOptions; label: string; choices: Choice[] }[] = [
+  {
+    key: "signer",
     label: "Who countersigns",
     choices: [
-      { value: "you", label: "You (Agent ID #2)" },
-      { value: "friend", label: "A friend (#3)" },
-      { value: "author", label: "The author (#1)" },
-      { value: "bot", label: "A bot (no Agent ID)" },
+      { value: "you", label: "You" },
+      { value: "friend", label: "A friend" },
+      { value: "author", label: "The author" },
+      { value: "bot", label: "A bot" },
     ],
   },
-  sender: {
-    label: "The cited transaction was sent by",
+  {
+    key: "sender",
+    label: "Tx sent by",
     choices: [
       { value: "signer", label: "the countersigner" },
       { value: "someone", label: "someone else" },
     ],
   },
-  target: {
-    label: "It called",
+  {
+    key: "target",
+    label: "Tx called",
     choices: [
       { value: "vault", label: "the author's vault" },
-      { value: "token", label: "the shared stablecoin" },
-      { value: "other", label: "an unrelated contract" },
+      { value: "token", label: "a shared token" },
+      { value: "other", label: "something else" },
     ],
   },
-  fn: {
+  {
+    key: "fn",
     label: "Function",
     choices: [
-      { value: "declared", label: "declared in countersign.json" },
-      { value: "undeclared", label: "not declared" },
+      { value: "declared", label: "declared" },
+      { value: "undeclared", label: "undeclared" },
     ],
   },
-  when: {
+  {
+    key: "when",
     label: "When",
     choices: [
       { value: "recent", label: "18 min ago" },
       { value: "old", label: "3 days ago" },
-      { value: "before", label: "before the skill existed" },
+      { value: "before", label: "before the skill" },
     ],
   },
-  approval: {
-    label: "Approval it made",
+  {
+    key: "approval",
+    label: "Approval",
     choices: [
       { value: "none", label: "none" },
-      { value: "capped", label: "50 USD to the vault (cap 100)" },
-      { value: "over-cap", label: "unlimited to the vault" },
-      { value: "undeclared", label: "50 USD to an unknown address" },
+      { value: "capped", label: "50 (cap 100)" },
+      { value: "over-cap", label: "unlimited" },
+      { value: "undeclared", label: "to a stranger" },
     ],
   },
-  status: {
+  {
+    key: "status",
     label: "Result",
     choices: [
       { value: "success", label: "succeeded" },
       { value: "reverted", label: "reverted" },
     ],
   },
-};
+];
 
 export function Builder() {
   const [opts, setOpts] = useState<BuilderOptions>(DEFAULT_BUILDER);
@@ -78,53 +86,40 @@ export function Builder() {
     };
   }, [opts]);
 
-  const v = result ? VERDICT[result.outcome] : null;
+  const stamp = result ? OUTCOME_STAMP[result.outcome] : null;
   return (
     <div className="builder">
-      <div className="card builder-controls">
-        {(Object.keys(CONTROLS) as (keyof BuilderOptions)[]).map((key) => {
-          const c = CONTROLS[key] as { label: string; choices: { value: string; label: string }[] };
-          return (
-            <fieldset key={key} className="seg-field">
-              <legend>{c.label}</legend>
-              <div className="seg">
-                {c.choices.map((ch) => (
-                  <button
-                    key={ch.value}
-                    type="button"
-                    aria-pressed={opts[key] === ch.value}
-                    onClick={() => setOpts((o) => ({ ...o, [key]: ch.value }))}
-                  >
-                    {ch.label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          );
-        })}
-        <button type="button" className="link small" onClick={() => setOpts(DEFAULT_BUILDER)}>
+      <div className="builder-controls">
+        {CONTROLS.map((c) => (
+          <fieldset key={c.key} className="seg-field">
+            <legend>{c.label}</legend>
+            <div className="seg">
+              {c.choices.map((ch) => (
+                <button key={ch.value} type="button" aria-pressed={opts[c.key] === ch.value} onClick={() => setOpts((o) => ({ ...o, [c.key]: ch.value }))}>
+                  {ch.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+        <button type="button" className="link" onClick={() => setOpts(DEFAULT_BUILDER)}>
           reset to an honest session
         </button>
       </div>
-      <div className="card builder-out">
-        {result && v ? (
+      <div className="builder-out">
+        {result && stamp ? (
           <>
-            <div className={`verdict shown ${v.cls}`}>
-              <div className="verdict-line">
-                <span className="vi">{v.icon}</span>
-                {result.revert ? `Reverted: ${result.revert.error}()` : v.label}
-              </div>
-              <div className="row tight" style={{ marginTop: 8 }}>
-                <img src={badgeUri(result.report)} alt="badge" height={20} />
-              </div>
+            <div className="verdict shown">
+              <Stamp kind={stamp.kind} big>
+                {result.revert ? `${stamp.label} · ${result.revert.error}` : stamp.label}
+              </Stamp>
+              <img src={badgeUri(result.report)} alt="badge" height={20} />
             </div>
-            <h4 className="sub">The cited transaction</h4>
-            <TxTable rows={result.txs} />
-            <h4 className="sub">Checks</h4>
+            <div className="sub">Checks</div>
             <Trace steps={result.steps} />
           </>
         ) : (
-          <p className="muted">Running the verifier…</p>
+          <p className="td">Running the verifier…</p>
         )}
       </div>
     </div>
