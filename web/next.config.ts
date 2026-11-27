@@ -20,6 +20,8 @@ const config: NextConfig = {
   transpilePackages: ["@countersign/core", "@countersign/redline"],
   // The monorepo root, so file tracing (and Vercel) include the workspace packages.
   outputFileTracingRoot: resolve(here, ".."),
+  // The share-card fonts are read from disk (web/assets/og) by the opengraph-image routes.
+  outputFileTracingIncludes: { "/**/opengraph-image": ["./assets/og/*"] },
   env: { NEXT_PUBLIC_COMMIT_SHA: commitSha() },
   poweredByHeader: false,
   reactStrictMode: true,

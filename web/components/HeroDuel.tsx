@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { botTraffic, INITIAL_DUEL, loadSim, sendBots, signWithInk, useForReal, type DuelEvent, type DuelState } from "@/lib/duel";
+import { botTraffic, INITIAL_DUEL, loadSim, sendBots, shareText, signWithInk, useForReal, type DuelEvent, type DuelState } from "@/lib/duel";
 import { signature } from "@/lib/fonts";
 import { prefersReducedMotion, Rolling, useLater, useVisible } from "@/lib/motion";
 import { pen } from "@/lib/penFont";
+import { SITE_URL } from "@/lib/site";
 import { BotSwarm } from "./BotSwarm";
 import { InkPad } from "./InkPad";
 import { PenMark } from "./PenMark";
@@ -246,6 +247,7 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
   // can't cancel them). "still 0" fades out when a real countersign rolls the count to 1.
   const ringOn = (circled || botsUsed) && (!s.signed || counted);
   const ringDelay = circled ? 0 : T.strike;
+  const played = s.events.length > 0;
 
   return (
     <div className={`hero-grid${tilt ? " tilt" : ""}`}>
@@ -357,7 +359,17 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
             {spoken(last, s)}
           </div>
         </div>
-        <p className="demo-note">Demo: made-up downloads, real verifier, simulated chain.</p>
+        <div className="cert-foot">
+          <p className="demo-note">Demo: made-up downloads, real verifier, simulated chain.</p>
+          <a
+            className={`textlink share-link${played ? " on" : ""}`}
+            href={`https://x.com/intent/post?text=${encodeURIComponent(shareText(s))}&url=${encodeURIComponent(SITE_URL)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Share ↗
+          </a>
+        </div>
       </div>
     </div>
   );

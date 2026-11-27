@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { botTraffic, INITIAL_DUEL, sendBots, signWithInk, swarmLayout, useForReal } from "../lib/duel";
+import { botTraffic, INITIAL_DUEL, sendBots, shareText, signWithInk, swarmLayout, useForReal } from "../lib/duel";
 
 describe("landing page duel (real verifier behind every verdict)", () => {
   it("bots raise downloads but never countersigns", async () => {
@@ -58,5 +58,18 @@ describe("landing page duel (real verifier behind every verdict)", () => {
     }
     expect(a.at(-1)!.delay).toBeGreaterThan(a[0]!.delay);
     expect(Math.max(...a.map((b) => b.delay))).toBeLessThanOrEqual(1150 + 90);
+  });
+
+  it("share text uses the visitor's own demo numbers and always says it's a demo", async () => {
+    let s = await sendBots(INITIAL_DUEL);
+    expect(shareText(s)).toBe(`Demo: I sent 1,000 bots at a skill certificate. Downloads: ${(INITIAL_DUEL.downloads + 1000).toLocaleString("en-US")}. Countersigns: 0.`);
+    s = await signWithInk(s);
+    expect(shareText(s)).toContain("forged the signature by hand too: void.");
+    s = await useForReal(s);
+    expect(shareText(s)).toMatch(/Countersigns: 0\..*Then I used it for real: 1 countersign\.$/);
+    for (const state of [INITIAL_DUEL, s]) {
+      expect(shareText(state).startsWith("Demo: ")).toBe(true);
+      expect(shareText(state)).not.toMatch(/on-chain|verified/i);
+    }
   });
 });

@@ -128,3 +128,20 @@ export function swarmLayout(n: number, seed: number, spreadMs = 1150): SwarmBit[
       .padStart(4, "0")}`,
   }));
 }
+
+const n = (x: number) => x.toLocaleString("en-US");
+
+/**
+ * The text for sharing the visitor's own run of the demo. Always says it's a demo: the downloads are made
+ * up and the chain is simulated, so it never claims anything happened on-chain.
+ */
+export function shareText(s: DuelState): string {
+  const bots = s.events.reduce((sum, e) => sum + (e.kind === "bots" ? e.count : 0), 0);
+  const inked = s.events.some((e) => e.kind === "ink");
+  const parts: string[] = [];
+  if (bots) parts.push(`I sent ${n(bots)} bots at a skill certificate. Downloads: ${n(s.downloads)}. Countersigns: ${s.signed ? 0 : s.countersigns}.`);
+  if (inked) parts.push("I forged the signature by hand too: void.");
+  if (s.signed) parts.push(`Then I used it for real: ${s.countersigns} countersign.`);
+  if (!parts.length) parts.push("Bots can fake downloads. Not countersigns.");
+  return `Demo: ${parts.join(" ")}`;
+}

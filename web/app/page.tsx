@@ -53,9 +53,6 @@ export default async function Home() {
             lede={<p className="lede">A countersign needs a real Agent ID and its own on-chain session. Try to fake one.</p>}
             versionLabel={short(honest.report.versionId)}
           />
-          <div className="hero-install">
-            <CommandChip cmd={INSTALL_CMD} />
-          </div>
         </div>
       </section>
 
@@ -131,7 +128,6 @@ export default async function Home() {
               {[
                 ["Contracts on BNB Smart Chain", "launching", "seal"],
                 ["Playground, Red-Line Check, builder", "live", "ok"],
-                ["Companion skill v1.0.0", "live", "ok"],
               ].map(([k, v, c]) => (
                 <div key={k} className="ledger-row">
                   <span className="k">{k}</span>
@@ -146,6 +142,23 @@ export default async function Home() {
               </a>
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="band closing">
+        <div className="wrap closing-row">
+          <h2>Your move.</h2>
+          <div className="closing-act">
+            <div className="hero-actions">
+              <Link className="btn seal" href="/try">
+                Try all 11 attacks
+              </Link>
+              <Link className="btn line" href="/check">
+                Check a skill
+              </Link>
+            </div>
+            <CommandChip cmd={INSTALL_CMD} />
+          </div>
         </div>
       </section>
     </>
