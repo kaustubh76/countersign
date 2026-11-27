@@ -154,7 +154,9 @@ a.ledger-row:hover .k { text-decoration: line-through; text-decoration-color: va
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 40px 80px -36px rgba(0, 0, 0, 0.9), 0 2px 0 rgba(255, 255, 255, 0.5) inset;
 }
 .cert-wrap { position: relative; }
-.certificate { padding: 26px 30px 22px; transform: rotate(0.6deg); }
+.certificate { padding: 26px 30px 22px; rotate: 0.6deg; }
+/* soft glare that follows the cursor (desktop tilt only; see the hero section) */
+.certificate::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity 0.3s; will-change: opacity; border-radius: inherit; mix-blend-mode: soft-light; background: radial-gradient(circle at var(--gx, 50%) var(--gy, 0%), rgba(255, 255, 255, 0.55), transparent 50%); }
 .cert-head { display: flex; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-muted); border-bottom: 2px solid var(--paper-ink); padding-bottom: 9px; }
 .cert-title { font-stretch: 72%; font-variation-settings: "wdth" 72; font-weight: 900; font-size: clamp(2.2rem, 3.4vw, 3rem); text-transform: uppercase; line-height: 0.95; margin: 16px 0 2px; }
 .cert-title span { color: var(--paper-muted); font-weight: 700; }
@@ -172,7 +174,8 @@ a.ledger-row:hover .k { text-decoration: line-through; text-decoration-color: va
 .floater { position: absolute; right: 0; bottom: 70%; font-family: var(--mono); font-size: 0.7rem; font-weight: 600; color: var(--bad-paper); pointer-events: none; animation: floatup 0.9s ease-out forwards; }
 .struck { position: absolute; left: -6px; right: -6px; top: 22%; width: calc(100% + 12px); height: 60%; }
 .zero-ring { position: absolute; left: -15px; top: -12px; width: calc(100% + 30px); height: calc(100% + 22px); }
-.zero-note { position: absolute; right: calc(100% + 18px); top: -15px; white-space: nowrap; rotate: -7deg; animation: rise 0.4s 0.35s ease both; }
+.zero-note { position: absolute; right: calc(100% + 18px); top: -15px; white-space: nowrap; rotate: -7deg; animation: rise 0.4s calc(var(--zd, 0ms) + 0.35s) ease both; }
+.zero-note.out, .pen-mark.pen-circle.zero-ring.out { animation: fade 0.3s 1.65s ease forwards; }
 .pen-note { color: var(--seal-paper); font-size: 1.35rem; line-height: 1; font-weight: 600; }
 .cert-sign { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; margin-top: 24px; }
 .sig-col { position: relative; min-width: 0; }
@@ -237,6 +240,27 @@ a.ledger-row:hover .k { text-decoration: line-through; text-decoration-color: va
   .hero-lede .lede { margin-top: 0; }
 }
 .hero-links { display: flex; flex-wrap: wrap; gap: 24px; }
+/* the headline gets proven by your clicks: red pen through "downloads.", a green tick on "countersigns." */
+.h-word { position: relative; display: inline-block; }
+.hero-head .h-mark { visibility: hidden; }
+.hero-head .h-mark path { stroke-width: 0.07em; }
+.h-strike { left: -3%; top: 36%; width: 106%; height: 30%; }
+.h-strike path { stroke: var(--bad); }
+.h-check { right: -0.3em; top: -0.4em; width: 0.62em; height: 0.5em; }
+.h-check path { stroke: var(--ok); }
+.hero-head.h-struck .h-strike { visibility: visible; animation: penwipe 0.5s 1.6s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.hero-head.h-checked .h-check { visibility: visible; animation: penwipe 0.45s 1.9s cubic-bezier(0.4, 0, 0.2, 1) both; }
+/* first paint: the paper lands on the desk and the orange line stamps in (transform-only, so LCP paints at once) */
+@media (prefers-reduced-motion: no-preference) {
+  .hero .certificate { animation: cert-land 0.7s 0.08s cubic-bezier(0.2, 0.8, 0.25, 1) backwards; }
+  .hero h1 .no { width: fit-content; transform-origin: 0 60%; animation: stamp-in 0.42s 0.12s cubic-bezier(0.2, 0.9, 0.25, 1.25) backwards; }
+}
+/* desktop: the paper tilts toward the cursor while you hover it */
+@media (hover: hover) and (pointer: fine) and (min-width: 981px) {
+  .hero-grid.tilt .certificate { transition: transform 0.12s ease-out; }
+  .hero-grid.tilt .cert-wrap:hover .certificate { transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  .hero-grid.tilt .cert-wrap:hover .certificate::after { opacity: 1; }
+}
 .hero-install { margin-top: 44px; }
 
 /* ─── bands (sections) ────────────────────────────────────────────────────────────────────── */
@@ -529,6 +553,8 @@ footer.site p { margin: 4px 0; }
   100% { transform: scale(1) rotate(-8deg); opacity: 1; }
 }
 @keyframes fade { to { opacity: 0; } }
+@keyframes cert-land { 0% { scale: 1.06; rotate: 3.2deg; } 60% { scale: 0.99; rotate: -0.2deg; } }
+@keyframes stamp-in { 0% { scale: 1.09; rotate: -2.5deg; } 70% { scale: 0.99; rotate: 0.3deg; } }
 @keyframes write { from { clip-path: inset(-20% 100% -20% 0); } to { clip-path: inset(-20% -10% -20% 0); } }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(54, 194, 122, 0.6); } 70% { box-shadow: 0 0 0 7px rgba(54, 194, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(54, 194, 122, 0); } }
 @keyframes tick { from { color: var(--ok); } to { color: var(--text); } }
@@ -565,7 +591,7 @@ footer.site p { margin: 4px 0; }
   .hero { padding: 26px 0 44px; }
   .hero h1 { font-size: clamp(2.3rem, 11.2vw, 3rem); }
   section.band { padding: 48px 0; }
-  .certificate { padding: 14px 16px 12px; transform: none; }
+  .certificate { padding: 14px 16px 12px; rotate: none; }
   .cert-head { font-size: 0.58rem; letter-spacing: 0.08em; padding-bottom: 6px; }
   .cert-title { font-size: 1.9rem; margin-top: 10px; }
   .cert-id { font-size: 0.66rem; }

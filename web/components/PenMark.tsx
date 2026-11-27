@@ -10,6 +10,7 @@ const PATHS = {
   strike: { box: "0 0 120 20", d: "M3 13 C30 9 58 12 84 8 C97 6 108 7 117 5" },
   underline: { box: "0 0 120 14", d: "M3 6 C28 10 56 4 82 8 C96 10 108 6 117 8" },
   bracket: { box: "0 0 20 120", d: "M15 4 C6 6 7 20 7 36 C7 50 3 56 1 60 C3 64 7 70 7 84 C7 100 6 114 15 116" },
+  check: { box: "0 0 62 50", d: "M5 27 C10 32 15 38 20 45 C30 29 43 14 58 4" },
 } as const;
 
 export type PenKind = keyof typeof PATHS;

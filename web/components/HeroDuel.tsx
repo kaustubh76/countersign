@@ -96,11 +96,12 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
   const [idle, setIdle] = useState(true);
   const [attract, setAttract] = useState(0);
   const [floaters, setFloaters] = useState<{ id: number; n: number }[]>([]);
-  const [stillZero, setStillZero] = useState(false);
-  const [struck, setStruck] = useState(false);
+  const [circled, setCircled] = useState(false);
   const [nudge, setNudge] = useState(false);
   const [pageShown, setPageShown] = useState(true);
+  const [tilt, setTilt] = useState(false);
   const paper = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
   const ticks = useRef(0);
   const floaterId = useRef(0);
   const later = useLater();
@@ -128,9 +129,11 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
   }, []);
 
   // Attract mode: made-up bot traffic while the certificate is on screen, until the first interaction.
+  // The first tick waits for the paper to land (the cert-land CSS animation).
   useEffect(() => {
     if (!idle || !visible || !pageShown || ticks.current >= ATTRACT_TICKS || prefersReducedMotion()) return;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
     const tick = () => {
       ticks.current += 1;
       const n = 1 + Math.floor(Math.random() * 6);
@@ -138,16 +141,66 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
       setAttract((a) => a + n);
       const id = ++floaterId.current;
       setFloaters((f) => [...f.slice(-3), { id, n }]);
-      if (ticks.current === STILL_ZERO_AT) setStillZero(true);
+      if (ticks.current === STILL_ZERO_AT) setCircled(true);
       if (ticks.current >= ATTRACT_TICKS) {
         setNudge(true);
         return;
       }
       timer = setTimeout(tick, 140 + Math.random() * 240);
     };
-    timer = setTimeout(tick, ticks.current === 0 ? 600 : 250);
-    return () => clearTimeout(timer);
+    const start = () => {
+      if (!cancelled) timer = setTimeout(tick, ticks.current === 0 ? 300 : 250);
+    };
+    const landing = paper.current
+      ?.getAnimations?.()
+      .find((a) => "animationName" in a && (a as CSSAnimation).animationName === "cert-land");
+    if (ticks.current === 0 && landing && landing.playState !== "finished") landing.finished.then(start, start);
+    else start();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [idle, visible, pageShown]);
+
+  // Desktop: the paper tilts toward the cursor (flat while someone is signing on it).
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine) and (min-width: 981px)");
+    const update = () => setTilt(mq.matches && !prefersReducedMotion());
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const w = wrap.current;
+    const p = paper.current;
+    if (!tilt || !w || !p) return;
+    let raf = 0;
+    let last: PointerEvent | null = null;
+    const apply = () => {
+      raf = 0;
+      if (!last) return;
+      const r = w.getBoundingClientRect();
+      const flat = last.buttons !== 0 || (last.target instanceof Element && last.target.closest(".sig-col.you") !== null);
+      const dx = Math.max(-1, Math.min(1, (last.clientX - r.left - r.width / 2) / (r.width / 2)));
+      const dy = Math.max(-1, Math.min(1, (last.clientY - r.top - r.height / 2) / (r.height / 2)));
+      p.style.setProperty("--ry", flat ? "0deg" : `${(dx * 4).toFixed(2)}deg`);
+      p.style.setProperty("--rx", flat ? "0deg" : `${(-dy * 3).toFixed(2)}deg`);
+      p.style.setProperty("--gx", `${(((last.clientX - r.left) / r.width) * 100).toFixed(1)}%`);
+      p.style.setProperty("--gy", `${(((last.clientY - r.top) / r.height) * 100).toFixed(1)}%`);
+    };
+    const move = (e: PointerEvent) => {
+      last = e;
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    w.addEventListener("pointermove", move);
+    w.addEventListener("pointerdown", move);
+    return () => {
+      w.removeEventListener("pointermove", move);
+      w.removeEventListener("pointerdown", move);
+      cancelAnimationFrame(raf);
+    };
+  }, [tilt]);
 
   const jolt = () => {
     const el = paper.current;
@@ -176,17 +229,8 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
       setS(next);
       setScene((n) => n + 1);
       const reduced = prefersReducedMotion();
-      if (e.kind === "bots") {
-        later.after(reduced ? 0 : T.swarm, jolt);
-        later.after(reduced ? 0 : T.strike, () => {
-          setStruck(true);
-          if (next.countersigns === 0) setStillZero(true);
-        });
-      } else if (e.kind === "real" && e.outcome === "counted") {
-        later.after(reduced ? 0 : T.count, () => setStillZero(false));
-      } else if (e.kind === "real") {
-        jolt();
-      }
+      if (e.kind === "bots") later.after(reduced ? 0 : T.swarm, jolt);
+      else if (e.kind === "real" && e.outcome !== "counted") jolt();
       return e.kind !== "real" || e.outcome !== "counted";
     } catch {
       setFailed(true);
@@ -198,10 +242,14 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
 
   const warm = () => void loadSim().catch(() => undefined);
   const botsUsed = s.events.some((e) => e.kind === "bots");
+  // The red pen marks come from state that never resets, timed with CSS delays (a quick second click
+  // can't cancel them). "still 0" fades out when a real countersign rolls the count to 1.
+  const ringOn = (circled || botsUsed) && (!s.signed || counted);
+  const ringDelay = circled ? 0 : T.strike;
 
   return (
-    <div className="hero-grid">
-      <div className="hero-head">{title}</div>
+    <div className={`hero-grid${tilt ? " tilt" : ""}`}>
+      <div className={`hero-head${botsUsed ? " h-struck" : ""}${s.signed ? " h-checked" : ""}`}>{title}</div>
       <div className="hero-lede">{lede}</div>
       <div className="hero-act">
         <div className="hero-actions">
@@ -218,7 +266,7 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
         </div>
       </div>
 
-      <div className="cert-wrap">
+      <div className="cert-wrap" ref={wrap}>
         <div className={`paper certificate${s.signed ? " signed" : ""}`} ref={paper}>
           <div className="cert-head">
             <span>Skill certificate</span>
@@ -245,7 +293,7 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
                       <span key={fl.id} className="floater" data-n={`+${fl.n}`} style={{ right: `${(fl.id % 3) * 14 - 6}px` }} aria-hidden="true" />
                     ))
                   : null}
-                {struck ? <PenMark kind="strike" className="is-playing struck" /> : null}
+                {botsUsed ? <PenMark kind="strike" className="is-playing struck" delay={T.strike} /> : null}
               </span>
               <span className="tag">unverified</span>
             </div>
@@ -254,10 +302,10 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
               <span className="leader" />
               <span className="v marked">
                 <Rolling value={s.countersigns} ms={320} delay={counted ? T.count : 0} />
-                {stillZero ? (
+                {ringOn ? (
                   <>
-                    <PenMark kind="circle" className="is-playing zero-ring" />
-                    <span className={`pen-note zero-note ${pen.className}`} aria-hidden="true">
+                    <PenMark kind="circle" className={`is-playing zero-ring${s.signed ? " out" : ""}`} delay={ringDelay} />
+                    <span className={`pen-note zero-note${s.signed ? " out" : ""} ${pen.className}`} style={{ ["--zd" as string]: `${ringDelay}ms` }} aria-hidden="true">
                       still 0
                     </span>
                   </>

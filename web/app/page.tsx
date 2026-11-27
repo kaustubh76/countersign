@@ -3,6 +3,7 @@ import { checkSkill } from "@countersign/redline";
 import { AttackLedger } from "@/components/AttackLedger";
 import { CommandChip } from "@/components/CodeBlock";
 import { HeroDuel } from "@/components/HeroDuel";
+import { PenMark } from "@/components/PenMark";
 import { Receipt } from "@/components/Receipt";
 import { RedactedPage } from "@/components/RedactedPage";
 import { Stamp } from "@/components/Stamp";
@@ -35,7 +36,18 @@ export default async function Home() {
           <HeroDuel
             title={
               <h1>
-                Bots can fake downloads. <span className="no">Not countersigns.</span>
+                Bots can fake{" "}
+                <span className="h-word">
+                  downloads.
+                  <PenMark kind="strike" className="h-mark h-strike" />
+                </span>{" "}
+                <span className="no">
+                  Not{" "}
+                  <span className="h-word">
+                    countersigns.
+                    <PenMark kind="check" className="h-mark h-check" />
+                  </span>
+                </span>
               </h1>
             }
             lede={<p className="lede">A countersign needs a real Agent ID and its own on-chain session. Try to fake one.</p>}
