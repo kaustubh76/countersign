@@ -37,6 +37,12 @@
     - Condensed caps, mono type, stamps and ledgers.
     - Words in `<main>`: `/` 1,001 → 246, `/try` 734 → 350, `/authors` 491 → 216.
     - Every page fits 390 px.
+  - **Nov 27, "make it hookier" pass** (user picked: bot swarm + live counter, sign it yourself, real-use sequence).
+    - Hero: made-up bot downloads tick up on their own while "Countersigns 0" gets circled in red pen. "Send 1,000 bots" fires a swarm that is struck out. "Use it for real" plays the session, C1–C5 and a green seal. The signature line can be signed by hand, and the real contract check voids the ink (`HeroDuel`, `BotSwarm`, `InkPad`, `lib/duel.ts`).
+    - Landing: the attack ledger runs scenarios inline. The countersign receipt is annotated in red pen. The malicious sample is shown as a redacted page (bars only; its wording never reaches the site). 241 words.
+    - `/try`: punch card of the 11 fakes, verdict first, case first on phones. Share links go to `/r/<n>`, which has its own preview image.
+    - `/check` opens with a samples ledger. `/authors` uses a checklist instead of the 01–04 strip.
+    - Checked: phones at 390 and 375 px, reduced motion, dev strict mode, self-scan 0.
 - [ ] **M5** Nov 27–Dec 6: genuine onboarding. Unique Agent ID gates: 10 by Dec 1, 20 by Dec 4, 30 by Dec 6.
 - [~] **M6** Dec 4–7.
   - [x] README, threat model, manifest spec and hash spec.
@@ -53,7 +59,7 @@
 export PATH="$HOME/.foundry/bin:$HOME/Library/pnpm:$PATH"
 (cd contracts && forge test)                                                  # 32 tests
 (cd contracts && RUN_FORK_TESTS=true forge test --match-path 'test/fork/*')   # real Agent ID on BSC
-pnpm -r test                                                                  # 115 tests (core 53, redline 23, web 35, companion 4)
+pnpm -r test                                                                  # 130 tests (core 53, redline 23, web 50, companion 4)
 scripts/e2e-local.sh                                                          # full flow on anvil
 ```
 
