@@ -4,6 +4,8 @@
 
 > **Download counts can be faked. The number of real Agent ID holders whose own wallets used a skill, cleanly, cannot.**
 
+**Live:** [countersign-proof.vercel.app](https://countersign-proof.vercel.app) · **Play the attacker:** [/try](https://countersign-proof.vercel.app/try) (the real verifier, in your browser) · **Red-Line Check:** [/check](https://countersign-proof.vercel.app/check) · **For authors:** [/authors](https://countersign-proof.vercel.app/authors)
+
 AI agents now install third-party **skills** that drive real wallets, including the Binance Agentic Wallet. The signal agents and people use to choose skills, **popularity**, is trivially faked: one researcher pushed a backdoored skill to #1 on a public skill marketplace with bot-inflated downloads ([write-up](https://dev.to/tomleelive/the-clawhub-malware-incident-a-first-warning-for-ai-agent-supply-chains-2icd)), and the Cloud Security Alliance counted over a thousand malicious skills by mid-2026 ([report](https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-skill-supply-chain-attacks-20260624-csa/)).
 
 COUNTERSIGN replaces popularity with a number bots can't inflate. For each exact skill version it shows how many **distinct Agent ID holders** made **successful, in-manifest calls to the author's own contract from their own wallet**. It then lets them **countersign** that on-chain. All of it is verified from chain data, never from opinions.
@@ -82,7 +84,7 @@ Neither COUNTERSIGN contract holds funds, accepts native value, or can touch any
 **As a user** (in any agent with the Binance Agentic Wallet skill):
 
 ```sh
-npx skills add <this-repo-url> --skill countersign
+npx skills add https://github.com/kaustubh76/countersign --skill countersign
 ```
 
 The agent then follows [`skills/countersign/SKILL.md`](skills/countersign/SKILL.md): `check-install` before a new skill, `check-call` and `check-preview` around every wallet call, `session start | record | end`, and a countersign offer after a clean session. Every on-chain step is a `baw contract-call preview` that you confirm in chat.

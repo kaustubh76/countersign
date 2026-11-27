@@ -4,7 +4,7 @@ Form: Binance App login required. The fields come from the official announcement
 
 **Project name:** COUNTERSIGN
 
-**Website:** *(Vercel URL, set at deploy)*
+**Website:** https://countersign-proof.vercel.app
 
 **Contract addresses (BNB Smart Chain, verified on BscScan):**
 - SkillRegistry: *(set at deploy)*
@@ -25,7 +25,8 @@ Form: Binance App login required. The fields come from the official announcement
 **Reward receiving address:** *(the user fills this in personally)*
 
 **Other materials:**
-- Source: *(GitHub URL)*
+- Source: https://github.com/kaustubh76/countersign
+- Try it without a wallet: https://countersign-proof.vercel.app/try (the real verifier, in the browser, against a simulated chain)
 - Demo video: *(link)*
 - Docs: README, `docs/threat-model.md`, `docs/manifest-spec.md`
-- Live numbers: `<website>/api/v1/stats`
+- Live numbers: https://countersign-proof.vercel.app/api/v1/stats

@@ -12,10 +12,10 @@
 
 > Hi, we built COUNTERSIGN for the Agent ID hackathon. It gives your skill two things judges care about:
 >
-> 1. **A free Red-Line pre-check**: confirmation bypass, uncapped approvals, undeclared recipients, credential requests, branding and promised-return wording, with file and line for each finding. Paste a commit-pinned GitHub folder at `<site>/check`; results stay private to you.
+> 1. **A free Red-Line pre-check**: confirmation bypass, uncapped approvals, undeclared recipients, credential requests, branding and promised-return wording, with file and line for each finding. Paste a commit-pinned GitHub folder, or drop a local folder (it never leaves your browser), at https://countersign-proof.vercel.app/check; results stay private to you.
 > 2. **A proof-of-use badge**: "N Agent ID holders whose own sessions were verified, 0 incidents". It counts only real, in-manifest use of *your* contract, from users' own wallets, so it can't be botted.
 >
-> Setup is about 10 minutes:
+> Setup is about 10 minutes (https://countersign-proof.vercel.app/authors has a countersign.json builder):
 > - add a `countersign.json` (your contract + functions + caps);
 > - mark your contract as the `anchor`;
 > - run `countersign register` from your Agent ID wallet and confirm the preview.
@@ -28,10 +28,12 @@
 >
 > It never signs anything for you: every transaction is a preview you confirm.
 >
-> Install: `npx skills add <repo-url> --skill countersign`
+> Install: `npx skills add https://github.com/kaustubh76/countersign --skill countersign`
+>
+> Curious how it can't be botted? Try to fake one: https://countersign-proof.vercel.app/try
 
 ## Daily tracking
 
-- `<site>/api/v1/stats` → `uniqueAgents.registry` and `uniqueAgents.countersign`.
+- `https://countersign-proof.vercel.app/api/v1/stats` → `uniqueAgents.registry` and `uniqueAgents.countersign`.
 - The union is what counts for eligibility.
 - Gates: **10 by Dec 1, 20 by Dec 4, 30 by Dec 6.**

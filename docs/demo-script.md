@@ -27,6 +27,9 @@ Record before the Jenner hardfork (2026-12-08 02:30 UTC). Have a backup take.
 
 ## 2:00–2:35 · Proof, not opinion
 
+If time is short, show these three live in the playground instead (https://countersign-proof.vercel.app/try?s=friend, then `twice`, then `smear`): it runs the same verifier code in the browser.
+
+
 - **A "friend" countersigns without using the skill**, citing a random tx. The page shows it *rejected*: "no cited transaction touched the author's own contract". The count is unchanged.
 - **The same Agent ID countersigns twice:** the tx reverts (`AlreadyCountersigned`). One Agent ID is one countersign per version.
 - **A competitor reports the skill** using their own wallet. It appears as an *unverified report*; there is no incident and the count is unchanged. *"A smear needs evidence nobody can fake from their own wallet."*

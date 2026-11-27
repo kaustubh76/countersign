@@ -538,3 +538,29 @@ pre.mb-json { padding: 14px 16px; max-height: 460px; overflow: auto; font-size: 
 @media (max-width: 760px) { .api-row { grid-template-columns: 56px 1fr; } .api-row .muted { grid-column: 1 / -1; } }
 .page-version { padding-top: 56px; }
 .page-version h1.page { word-break: break-word; }
+
+/* ─── mobile: single columns must be allowed to shrink below their content's one-line width ──── */
+.hero-copy, .hero-art, .detail, .rail, .mb-form, .mb-out, .builder-controls, .builder-out { min-width: 0; }
+.chip-cmd span { min-width: 0; }
+.listing { max-width: min(440px, 100%); }
+table.compare { min-width: 680px; }
+@media (max-width: 960px) {
+  .hero-grid, .split { grid-template-columns: minmax(0, 1fr); }
+  .listing.real { margin-right: 0; }
+}
+@media (max-width: 900px) {
+  .play, .builder { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .mb { grid-template-columns: minmax(0, 1fr); }
+  .scorebar .spacer { display: none; }
+  h1 { font-size: clamp(2.3rem, 10vw, 3.2rem); }
+  .live-strip .seg { white-space: normal; }
+}
+.rl-report { grid-template-columns: minmax(0, 1fr); }
+.rl-rule > div, ol.trace li > div { min-width: 0; }
+ul.rl-findings li, .td, .reason-bad { overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .scorebar { position: static; }
+  .badge-now .score-l { display: none; }
+}
