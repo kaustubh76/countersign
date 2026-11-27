@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ContentFetchError, fetchGithubSkill, parseGithubTreeUrl, skillFilesFromTarball } from "../src/content.js";
-import { hashSkillDir, hashSkillFiles } from "../src/skillHash.js";
+import { hashSkillDir } from "../src/skillDir.js";
+import { hashSkillFiles } from "../src/skillHash.js";
 
 describe("parseGithubTreeUrl", () => {
   it("accepts commit-pinned tree URLs only", () => {

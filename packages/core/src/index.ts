@@ -5,6 +5,8 @@ export * from "./deployments.js";
 export * from "./manifest.js";
 export * from "./rpc.js";
 export * from "./skillHash.js";
+export * from "./skillDir.js";
 export * from "./views.js";
 export * from "./content.js";
 export * from "./verifier.js";
+export * from "./snapshot.js";

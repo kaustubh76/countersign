@@ -21898,35 +21898,38 @@ function createReader(opts = {}) {
 }
 
 // ../core/src/skillHash.ts
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
 var EXCLUDED_DIRS = /* @__PURE__ */ new Set([".git", "node_modules"]);
 var EXCLUDED_FILES = /* @__PURE__ */ new Set([".DS_Store"]);
 var SkillHashError = class extends Error {
   name = "SkillHashError";
 };
 function normalizeSkillPath(path) {
-  const posix = path.split(sep).join("/").replace(/\\/g, "/");
+  const posix = path.replace(/\\/g, "/");
   const normalized = posix.normalize("NFC").replace(/^\.\//, "");
   if (normalized === "" || normalized.startsWith("/") || normalized.split("/").includes("..")) {
     throw new SkillHashError(`invalid path in skill: ${JSON.stringify(path)}`);
   }
   return normalized;
 }
-function isExcluded(path) {
+function isExcludedPath(path) {
   const parts = path.split("/");
   const base = parts[parts.length - 1] ?? "";
   return parts.slice(0, -1).some((p) => EXCLUDED_DIRS.has(p)) || EXCLUDED_DIRS.has(base) || EXCLUDED_FILES.has(base);
 }
+var utf8 = new TextEncoder();
 function compareUtf8(a, b) {
-  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+  const x = utf8.encode(a);
+  const y = utf8.encode(b);
+  const n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return x.length - y.length;
 }
 function hashSkillFiles(input) {
   const seen = /* @__PURE__ */ new Map();
   const files = [];
   for (const f of input) {
     const path = normalizeSkillPath(f.path);
-    if (isExcluded(path)) continue;
+    if (isExcludedPath(path)) continue;
     const previous = seen.get(path);
     if (previous !== void 0) {
       throw new SkillHashError(`two files normalize to the same path ${JSON.stringify(path)} (${previous}, ${f.path})`);
@@ -21945,6 +21948,10 @@ function hashSkillFiles(input) {
   }
   return { contentHash: keccak256(concat(parts)), files: hashed };
 }
+
+// ../core/src/skillDir.ts
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { join, relative } from "node:path";
 async function readSkillDir(root) {
   const base = await realpath(root);
   if (!(await stat(base)).isDirectory()) throw new SkillHashError(`not a directory: ${root}`);
@@ -22389,6 +22396,8 @@ async function evaluateRecord(input, src, record) {
     (agentId) => input.graph.countersignedAuthors.has(`${registrantKey}>${agentId.toString()}`)
   );
 }
+
+// ../core/src/snapshot.ts
 async function loadSnapshot(reader, d) {
   const block = await reader.getBlockNumber();
   const ids = await readVersionIds(reader, d);
@@ -22847,7 +22856,7 @@ function reportHash(report) {
 
 // src/context.ts
 import { readFile as readFile2 } from "node:fs/promises";
-var DEFAULT_API = "https://countersign.vercel.app";
+var DEFAULT_API = "https://countersign-proof.vercel.app";
 async function loadContext(args) {
   const chainId = Number(flag(args, "chain") ?? process.env.COUNTERSIGN_CHAIN_ID ?? BSC_CHAIN_ID);
   const file = flag(args, "deployment") ?? process.env.COUNTERSIGN_DEPLOYMENT;

@@ -19,7 +19,7 @@ export interface Context {
 }
 
 /** Public badge/API site. Pre-flight works without it (--verify-local); it is a cache, not a trust anchor. */
-export const DEFAULT_API = "https://countersign.vercel.app";
+export const DEFAULT_API = "https://countersign-proof.vercel.app";
 
 export async function loadContext(args: Args): Promise<Context> {
   const chainId = Number(flag(args, "chain") ?? process.env.COUNTERSIGN_CHAIN_ID ?? BSC_CHAIN_ID);

@@ -6,7 +6,7 @@ import {
   parseManifest,
   type ParsedManifest,
   type SkillFile,
-} from "@countersign/core";
+} from "@countersign/core/browser";
 import {
   BRAND_RE,
   isNegated,

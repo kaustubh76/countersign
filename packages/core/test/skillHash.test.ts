@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hashSkillDir, hashSkillFiles, SkillHashError } from "../src/skillHash.js";
+import { hashSkillDir } from "../src/skillDir.js";
+import { hashSkillFiles, SkillHashError } from "../src/skillHash.js";
 
 const enc = new TextEncoder();
 const file = (path: string, text: string) => ({ path, bytes: enc.encode(text) });

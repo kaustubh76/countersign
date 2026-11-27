@@ -14,5 +14,6 @@
   "dependencies": {
     "@countersign/core": "workspace:*",
     "viem": "2.58.6"
-  }
+  },
+  "sideEffects": false
 }

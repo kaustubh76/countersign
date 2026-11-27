@@ -1,5 +1,3 @@
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
 import { concat, keccak256, toBytes, type Hex } from "viem";
 import { CONTENT_HASH_DOMAIN } from "./constants.js";
 
@@ -13,6 +11,9 @@ import { CONTENT_HASH_DOMAIN } from "./constants.js";
  *
  * Excludes are fixed and cannot be configured: an ignore file would let an author hide executable code
  * from the hash. Symlinks inside the tree are rejected, because their content depends on the machine.
+ *
+ * Everything in this module is pure and also runs in a browser. Reading a folder from disk is in
+ * skillDir.ts (Node only).
  */
 
 export const EXCLUDED_DIRS: ReadonlySet<string> = new Set([".git", "node_modules"]);
@@ -39,7 +40,7 @@ export class SkillHashError extends Error {
 }
 
 export function normalizeSkillPath(path: string): string {
-  const posix = path.split(sep).join("/").replace(/\\/g, "/");
+  const posix = path.replace(/\\/g, "/");
   const normalized = posix.normalize("NFC").replace(/^\.\//, "");
   if (normalized === "" || normalized.startsWith("/") || normalized.split("/").includes("..")) {
     throw new SkillHashError(`invalid path in skill: ${JSON.stringify(path)}`);
@@ -47,14 +48,22 @@ export function normalizeSkillPath(path: string): string {
   return normalized;
 }
 
-function isExcluded(path: string): boolean {
+/** True for paths the content hash always skips: anything under .git/ or node_modules/, and .DS_Store. */
+export function isExcludedPath(path: string): boolean {
   const parts = path.split("/");
   const base = parts[parts.length - 1] ?? "";
   return parts.slice(0, -1).some((p) => EXCLUDED_DIRS.has(p)) || EXCLUDED_DIRS.has(base) || EXCLUDED_FILES.has(base);
 }
 
+const utf8 = new TextEncoder();
+
+/** Byte-wise comparison of the UTF-8 encodings (the same order as Node's Buffer.compare). */
 function compareUtf8(a: string, b: string): number {
-  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+  const x = utf8.encode(a);
+  const y = utf8.encode(b);
+  const n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i++) if (x[i] !== y[i]) return x[i]! - y[i]!;
+  return x.length - y.length;
 }
 
 /** Hash an in-memory file list. The verifier uses this on content fetched from contentURI. */
@@ -63,7 +72,7 @@ export function hashSkillFiles(input: readonly SkillFile[]): ContentHash {
   const files: { path: string; bytes: Uint8Array }[] = [];
   for (const f of input) {
     const path = normalizeSkillPath(f.path);
-    if (isExcluded(path)) continue;
+    if (isExcludedPath(path)) continue;
     const previous = seen.get(path);
     if (previous !== undefined) {
       throw new SkillHashError(`two files normalize to the same path ${JSON.stringify(path)} (${previous}, ${f.path})`);
@@ -82,34 +91,4 @@ export function hashSkillFiles(input: readonly SkillFile[]): ContentHash {
     hashed.push({ path: f.path, size: f.bytes.length, hash: fileHash });
   }
   return { contentHash: keccak256(concat(parts)), files: hashed };
-}
-
-/** Read every file under `root` (following a symlinked root, rejecting symlinks inside it). */
-export async function readSkillDir(root: string): Promise<SkillFile[]> {
-  const base = await realpath(root);
-  if (!(await stat(base)).isDirectory()) throw new SkillHashError(`not a directory: ${root}`);
-  const out: SkillFile[] = [];
-  async function walk(dir: string): Promise<void> {
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const abs = join(dir, entry.name);
-      const rel = relative(base, abs);
-      if (entry.isSymbolicLink()) throw new SkillHashError(`symlinks are not allowed inside a skill: ${rel}`);
-      if (entry.isDirectory()) {
-        if (!EXCLUDED_DIRS.has(entry.name)) await walk(abs);
-        continue;
-      }
-      if (entry.isFile()) {
-        if (!EXCLUDED_FILES.has(entry.name)) out.push({ path: rel, bytes: new Uint8Array(await readFile(abs)) });
-        continue;
-      }
-      throw new SkillHashError(`unsupported file type inside a skill: ${rel}`);
-    }
-  }
-  await walk(base);
-  return out;
-}
-
-export async function hashSkillDir(root: string): Promise<ContentHash> {
-  return hashSkillFiles(await readSkillDir(root));
 }

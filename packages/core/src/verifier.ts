@@ -11,13 +11,10 @@ import {
   type Transaction,
   type TransactionReceipt,
 } from "viem";
-import { FLAG_ANCHOR, FLAG_PULL, FLOW_APPROVE, FLOW_TRANSFER, KIND_COUNTERSIGN, KIND_REPORT, MANIFEST_FILE, RULESET_VERSION, SESSION_WINDOW_BLOCKS } from "./constants.js";
-import { fetchGithubSkill } from "./content.js";
-import type { Deployment } from "./deployments.js";
+import { FLAG_ANCHOR, FLAG_PULL, FLOW_APPROVE, FLOW_TRANSFER, KIND_COUNTERSIGN, MANIFEST_FILE, RULESET_VERSION, SESSION_WINDOW_BLOCKS } from "./constants.js";
 import { parseManifest } from "./manifest.js";
-import type { ChainReader } from "./rpc.js";
 import { hashSkillFiles, type SkillFile } from "./skillHash.js";
-import { readRecords, readVersion, readVersionIds, type RecordView, type VersionView } from "./views.js";
+import type { RecordView, VersionView } from "./views.js";
 
 /**
  * Ruleset countersign.ruleset/v1: decides, from chain data alone, whether each countersign counts and
@@ -41,6 +38,9 @@ import { readRecords, readVersion, readVersionIds, type RecordView, type Version
  *   I3 static       the published content fails the static Red-Line rules for confirmation bypass,
  *                   unlimited or undeclared transfers, or credential requests
  * Every other report is a claim: shown, never decisive, flagged when 3+ independent backed claims agree.
+ *
+ * This module is pure (it only needs a TxSource), so it also runs in a browser. Loading a registry
+ * snapshot from chain and fetching published content live in snapshot.ts.
  */
 
 export const TOPIC_TRANSFER: Hex = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -416,79 +416,5 @@ export async function evaluateRecord(input: VerifyInput, src: TxSource, record: 
     authorSet(v),
     new Set(input.reports.map((r) => r.agentId.toString())),
     (agentId) => input.graph.countersignedAuthors.has(`${registrantKey}>${agentId.toString()}`),
-  );
-}
-
-// ── loading from chain ─────────────────────────────────────────────────────────────────────────
-
-export interface RegistrySnapshot {
-  versions: Map<Hex, VersionView>;
-  countersigns: Map<Hex, RecordView[]>;
-  reports: Map<Hex, RecordView[]>;
-  graph: RegistryGraph;
-  block: bigint;
-}
-
-/** Read every version and record (views only; no eth_getLogs). Fine at hackathon scale. */
-export async function loadSnapshot(reader: ChainReader, d: Deployment): Promise<RegistrySnapshot> {
-  const block = await reader.getBlockNumber();
-  const ids = await readVersionIds(reader, d);
-  const versions = new Map<Hex, VersionView>();
-  const countersigns = new Map<Hex, RecordView[]>();
-  const reports = new Map<Hex, RecordView[]>();
-  for (const id of ids) {
-    const v = await readVersion(reader, d, id);
-    if (!v) continue;
-    versions.set(id, v);
-    countersigns.set(id, await readRecords(reader, d, id, KIND_COUNTERSIGN));
-    reports.set(id, await readRecords(reader, d, id, KIND_REPORT));
-  }
-  const graph: RegistryGraph = { countersignedAuthors: new Set() };
-  for (const [id, records] of countersigns) {
-    const registrant = versions.get(id)?.registrantAgentId;
-    if (registrant === undefined) continue;
-    for (const r of records) graph.countersignedAuthors.add(`${r.agentId.toString()}>${registrant.toString()}`);
-  }
-  return { versions, countersigns, reports, graph, block };
-}
-
-export interface VerifyOptions {
-  staticCheck?: StaticCheck;
-  /** Fetch content for C1/I3 (default: GitHub tree URLs). Pass false to skip. */
-  fetchContent?: ((uri: string) => Promise<SkillFile[]>) | false;
-}
-
-export async function verifyFromSnapshot(
-  snap: RegistrySnapshot,
-  chainId: number,
-  versionId: Hex,
-  src: TxSource,
-  opts: VerifyOptions = {},
-): Promise<VersionReport | null> {
-  const version = snap.versions.get(versionId);
-  if (!version) return null;
-  let content: SkillFile[] | null | undefined;
-  let contentError: string | undefined;
-  if (opts.fetchContent !== false) {
-    try {
-      content = await (opts.fetchContent ?? ((uri: string) => fetchGithubSkill(uri)))(version.contentURI);
-    } catch (e) {
-      content = null;
-      contentError = (e as Error).message;
-    }
-  }
-  return verifyVersionData(
-    {
-      chainId,
-      version,
-      countersigns: snap.countersigns.get(versionId) ?? [],
-      reports: snap.reports.get(versionId) ?? [],
-      graph: snap.graph,
-      content,
-      contentError,
-      staticCheck: opts.staticCheck,
-      computedAtBlock: snap.block,
-    },
-    src,
   );
 }
