@@ -161,5 +161,7 @@ describe("disclosure in the skill's prose", () => {
     expect(isDisclosed(mint, ["The owner cannot mint new tokens."])).toBe(false);
     expect(isDisclosed(mint, ["Users mint a badge after a swap."])).toBe(false);
     expect(isDisclosed(tax, ["The owner can pause transfers."])).toBe(false);
+    // advice to the reader about their own contracts discloses nothing about this skill's
+    expect(isDisclosed(mint, ["Say what your contracts' owner can do (mint, change fees, pause) in your SKILL.md."])).toBe(false);
   });
 });

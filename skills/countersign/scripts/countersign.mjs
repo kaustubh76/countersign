@@ -23254,11 +23254,12 @@ var DISCLOSURE_WORDS = {
   call: /\b(?:arbitrary|any)\s+calls?\b|\bexecute\b/i
 };
 var OWNER_WORD_RE = /\b(?:owner|admin|administrator|operator|deployer|team|multisig|multi-sig|governance|governor|guardian|role|privileged|controller)s?\b/i;
+var ADDRESSED_TO_READER_RE = /\byour\s+(?:own\s+)?(?:contract|contracts|token|tokens|vault|app|project)(?:'s|s')?\b/i;
 function isDisclosed(power, prose) {
   for (const text of prose) {
     if (power.signature && text.includes(power.signature)) return true;
     for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
-      if (!OWNER_WORD_RE.test(sentence)) continue;
+      if (!OWNER_WORD_RE.test(sentence) || ADDRESSED_TO_READER_RE.test(sentence)) continue;
       const byName = power.fn.startsWith("(") ? -1 : sentence.search(new RegExp(`\\b${power.fn.replace(/\$/g, "\\$")}\\b`));
       const byWord = DISCLOSURE_WORDS[power.category].exec(sentence)?.index ?? -1;
       const at = byName >= 0 ? byName : byWord;

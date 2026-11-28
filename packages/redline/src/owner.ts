@@ -414,6 +414,8 @@ const DISCLOSURE_WORDS: Record<PowerCategory, RegExp> = {
   call: /\b(?:arbitrary|any)\s+calls?\b|\bexecute\b/i,
 };
 const OWNER_WORD_RE = /\b(?:owner|admin|administrator|operator|deployer|team|multisig|multi-sig|governance|governor|guardian|role|privileged|controller)s?\b/i;
+/** Advice to the reader about their own contracts ("say what your contract's owner can do") discloses nothing. */
+const ADDRESSED_TO_READER_RE = /\byour\s+(?:own\s+)?(?:contract|contracts|token|tokens|vault|app|project)(?:'s|s')?\b/i;
 
 /**
  * Does the skill's prose disclose this power? Yes if it gives the exact signature, or if one sentence names
@@ -423,7 +425,7 @@ export function isDisclosed(power: OwnerPower, prose: readonly string[]): boolea
   for (const text of prose) {
     if (power.signature && text.includes(power.signature)) return true;
     for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
-      if (!OWNER_WORD_RE.test(sentence)) continue;
+      if (!OWNER_WORD_RE.test(sentence) || ADDRESSED_TO_READER_RE.test(sentence)) continue;
       const byName = power.fn.startsWith("(") ? -1 : sentence.search(new RegExp(`\\b${power.fn.replace(/\$/g, "\\$")}\\b`));
       const byWord = DISCLOSURE_WORDS[power.category].exec(sentence)?.index ?? -1;
       const at = byName >= 0 ? byName : byWord;
