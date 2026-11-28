@@ -1,0 +1,38 @@
+name: Red-Line attestation
+description: Ask for a free, on-chain Red-Line attestation of a registered skill version.
+title: "attest: <skill name>"
+labels: ["attestation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The attester re-runs the open-source Red-Line Check on your registered version, including RL4 (owner powers read from your contracts' verified source). If every rule passes, the full report is published at `/attestations/56/<versionId>.json` and attested on BNB Smart Chain, so anyone can re-run it.
+
+        Run it yourself first: `node skills/countersign/scripts/countersign.mjs redline <your-skill> --contracts <your contracts>`. Verify your contracts on Sourcify (free, no key), so RL4 can read them.
+
+        If something fails, nothing is published: we reply with "not yet" and you can see why with the command above.
+  - type: input
+    id: version
+    attributes:
+      label: versionId
+      description: From `countersign register`, or your skill's page at /s/<versionId>.
+      placeholder: "0x…"
+    validations:
+      required: true
+  - type: input
+    id: uri
+    attributes:
+      label: contentURI
+      description: The commit-pinned GitHub folder you registered.
+      placeholder: "https://github.com/<owner>/<repo>/tree/<commit>/<skill-folder>"
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Before we start
+      options:
+        - label: I registered this version from the publisher wallet named in its countersign.json.
+          required: true
+        - label: I agree that a passing report (including its advisory notes) is published.
+          required: true

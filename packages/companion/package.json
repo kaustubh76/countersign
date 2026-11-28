@@ -10,7 +10,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "build:skill": "node scripts/build-skill.mjs"
+    "build:skill": "node scripts/build-skill.mjs",
+    "attest": "tsx scripts/attest.ts"
   },
   "dependencies": {
     "@countersign/core": "workspace:*",

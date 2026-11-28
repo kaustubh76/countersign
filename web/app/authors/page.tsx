@@ -4,7 +4,7 @@ import { CodeBlock } from "@/components/CodeBlock";
 import { Stamp } from "@/components/Stamp";
 import { badgeSvg } from "@/lib/badge";
 import { getIndex } from "@/lib/data";
-import { SITE_URL } from "@/lib/site";
+import { REPO_URL, SITE_URL } from "@/lib/site";
 import { ManifestBuilder } from "./ManifestBuilder";
 
 export const metadata: Metadata = {
@@ -37,10 +37,15 @@ export default async function AuthorsPage() {
               <span className="why">from your Agent ID wallet</span>
               {index.deployed ? null : <Stamp kind="seal">Launching</Stamp>}
             </div>
+            <a className="ledger-row" href={`${REPO_URL}/issues/new?template=attestation.yml`} rel="noreferrer">
+              <span className="k">Get attested</span>
+              <span className="leader" />
+              <span className="why">free Red-Line attestation →</span>
+            </a>
             <div className="ledger-row">
               <span className="k">Show it</span>
               <span className="leader" />
-              <img src={`data:image/svg+xml;utf8,${encodeURIComponent(badgeSvg({ counted: 0, incidents: 0, status: "ok" }))}`} alt="README badge" height={20} />
+              <img src={`data:image/svg+xml;utf8,${encodeURIComponent(badgeSvg({ counted: 0, incidents: 0, status: "ok", attestation: "passed" }))}`} alt="README badge" height={20} />
             </div>
             <div className="ledger-row total">
               <span className="k">about ten minutes</span>

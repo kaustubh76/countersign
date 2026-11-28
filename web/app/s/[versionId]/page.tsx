@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CodeBlock } from "@/components/CodeBlock";
 import { Stamp } from "@/components/Stamp";
+import { publishedReport } from "@/lib/attestations";
 import { getIndex } from "@/lib/data";
 import { INCIDENT_LABELS, REASON_LABELS, shortHash, STATUS_LABELS } from "@/lib/reasons";
 import { bscscan, SITE_URL } from "@/lib/site";
@@ -21,6 +22,7 @@ export default async function VersionPage({ params }: { params: Promise<{ versio
   const v = index.versions.find((x) => x.versionId.toLowerCase() === versionId.toLowerCase());
   if (!v) notFound();
   const r = v.report;
+  const published = r.attestations.some((a) => a.active) ? await publishedReport(index.chainId, v.versionId) : null;
   const rejected = Object.entries(r.countersigns.rejectionReasons).sort((a, b) => b[1] - a[1]);
   const statusKind = v.status === "ok" ? "ok" : v.status === "incident" ? "bad" : v.status === "warning" ? "warn" : "idle";
   const checks: { state: string; title: string; detail: React.ReactNode }[] = [
@@ -53,10 +55,19 @@ export default async function VersionPage({ params }: { params: Promise<{ versio
           {r.attestations
             .filter((a) => a.active)
             .map((a) => (
-              <div key={a.attester} className="hash">
-                {a.reportHash}
+              <div key={a.attester}>
+                <span className="hash">{shortHash(a.reportHash)}</span>{" "}
+                {published ? (
+                  <>
+                    · <a href={published.url}>report</a>{" "}
+                    {published.hash.toLowerCase() === a.reportHash.toLowerCase() ? "· matches the chain ✓" : "· differs from the chain ✗"}
+                  </>
+                ) : (
+                  "· report not published here"
+                )}
               </div>
             ))}
+          <div className="tiny hash">re-run: pnpm attest {v.versionId} --verify</div>
         </>
       ) : (
         "anyone can re-run the check"
