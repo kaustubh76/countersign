@@ -21,14 +21,15 @@ import {ISkillRegistry} from "./interfaces/ISkillRegistry.sol";
 ///         nothing. The canonical version is the one whose registrant matches the `publisher` named
 ///         inside the hashed content, and every pre-flight recomputes the id locally.
 ///
-///         Owner permissions (disclosed): `setAttester`, plus the Ownable2Step functions
-///         `transferOwnership`, `acceptOwnership` and `renounceOwnership`. The owner cannot edit,
-///         delete or pause versions, manifests, endorsements or attestations, and cannot move any
-///         user's assets.
+///         Owner permissions (disclosed): `setAttester(address,bool)` (add or remove a Red-Line attester),
+///         plus the Ownable2Step functions `transferOwnership`, `acceptOwnership` and `renounceOwnership`.
+///         The owner cannot edit, delete or pause versions, manifests, endorsements or attestations, and
+///         cannot move any user's assets.
 ///
-///         Attester permissions (disclosed): `attest` and `revokeAttestation`. An attestation caches the
-///         result of the open-source Red-Line Check. Anyone can re-run the check from the stored
-///         checker commit and compare the report hash.
+///         Attester permissions (disclosed): `attest`, and `revokeAttestation` of its own attestations.
+///         There can be several attesters; each attestation is kept per attester, and it counts only while
+///         its attester is enabled. An attestation caches the result of the open-source Red-Line Check:
+///         anyone can re-run the check from the stored checker commit and compare the report hash.
 contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
     // ── manifest vocabulary ────────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,18 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
     uint256 public constant MAX_FLOWS = 32;
     uint256 public constant MAX_URI_BYTES = 512;
     uint256 public constant MAX_PAGE = 100;
+    /// @notice At most this many attesters are enabled at once.
+    uint256 public constant MAX_ATTESTERS = 16;
+    /// @notice At most this many distinct attesters can attest one version (keeps `attestationsOf` bounded).
+    uint256 public constant MAX_ATTESTATIONS = 32;
+
+    /// @notice Results of `checkCall`, the manifest check the GuardedExecutor enforces on-chain.
+    uint8 public constant CALL_OK = 0;
+    uint8 public constant CALL_UNKNOWN_VERSION = 1;
+    uint8 public constant CALL_UNDECLARED_TARGET = 2;
+    uint8 public constant CALL_UNDECLARED_FUNCTION = 3;
+    uint8 public constant CALL_VALUE_OVER_CAP = 4;
+    uint8 public constant CALL_CODE_CHANGED = 5;
 
     bytes4 private constant OWNER_SELECTOR = 0x8da5cb5b; // owner()
     uint256 private constant OWNER_PROBE_GAS = 50_000;
@@ -107,14 +120,16 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         bytes32 reportHash;
     }
 
-    address public attester;
+    mapping(address account => bool) public isAttester;
+    uint256 public attesterCount;
     uint256 public uniqueAgents;
 
     mapping(bytes32 versionId => Version) private _versions;
     mapping(bytes32 versionId => Target[]) private _targets;
     mapping(bytes32 versionId => Permission[]) private _permissions;
     mapping(bytes32 versionId => Flow[]) private _flows;
-    mapping(bytes32 versionId => Attestation) private _attestations;
+    mapping(bytes32 versionId => mapping(address attester => Attestation)) private _attestations;
+    mapping(bytes32 versionId => address[]) private _attestedBy;
     mapping(bytes32 contentHash => bytes32[]) private _byContent;
     mapping(uint256 agentId => bool) private _seenAgent;
     bytes32[] private _versionLog;
@@ -136,7 +151,7 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         bytes32 reportHash
     );
     event AttestationRevoked(bytes32 indexed versionId, address attester);
-    event AttesterChanged(address indexed previous, address indexed next);
+    event AttesterSet(address indexed account, bool enabled);
 
     error ZeroContentHash();
     error BadContentURI(uint256 length);
@@ -157,12 +172,13 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
     error NotAttester();
     error BadRuleMask(uint32 rulesChecked, uint32 rulesPassed);
     error NoAttestation(bytes32 versionId);
+    error ZeroAttester();
 
     constructor(IAgentID agentId, address initialOwner, address initialAttester)
         AgentIdGated(agentId)
         Ownable(initialOwner)
     {
-        _setAttester(initialAttester);
+        if (initialAttester != address(0)) _setAttester(initialAttester, true);
     }
 
     // ── writes ────────────────────────────────────────────────────────────────────────────────────
@@ -200,8 +216,9 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         emit AnchorEndorsed(versionId, targetIndex, msg.sender);
     }
 
-    /// @notice Record the result of the open-source Red-Line Check for a version. Attester only.
-    /// @param rulesChecked  Bitmask of the rules that were run.
+    /// @notice Record the result of the open-source Red-Line Check for a version. Enabled attesters only;
+    ///         a new attestation by the same attester replaces its previous one.
+    /// @param rulesChecked  Bitmask of the rules that were run (bit n-1 = red line n).
     /// @param rulesPassed   Bitmask of the rules that passed; must be a subset of rulesChecked.
     /// @param checkerCommit The git commit of the checker that produced the report.
     /// @param reportHash    keccak256 of the canonical report JSON (published with the result).
@@ -212,10 +229,15 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         bytes20 checkerCommit,
         bytes32 reportHash
     ) external {
-        if (msg.sender != attester) revert NotAttester();
+        if (!isAttester[msg.sender]) revert NotAttester();
         if (_versions[versionId].registeredBlock == 0) revert UnknownVersion(versionId);
         if (rulesPassed & ~rulesChecked != 0) revert BadRuleMask(rulesChecked, rulesPassed);
-        _attestations[versionId] = Attestation({
+        if (_attestations[versionId][msg.sender].blockNumber == 0) {
+            address[] storage by = _attestedBy[versionId];
+            if (by.length >= MAX_ATTESTATIONS) revert TooMany(by.length + 1, MAX_ATTESTATIONS);
+            by.push(msg.sender);
+        }
+        _attestations[versionId][msg.sender] = Attestation({
             attester: msg.sender,
             blockNumber: uint64(block.number),
             rulesChecked: rulesChecked,
@@ -227,18 +249,19 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         emit Attested(versionId, msg.sender, rulesChecked, rulesPassed, checkerCommit, reportHash);
     }
 
-    /// @notice Withdraw an attestation, e.g. if the checker had a bug. Attester only.
+    /// @notice Withdraw your own attestation, e.g. if the checker had a bug. Works even after the owner
+    ///         disabled you, so a retired key can still take back what it signed.
     function revokeAttestation(bytes32 versionId) external {
-        if (msg.sender != attester) revert NotAttester();
-        Attestation storage a = _attestations[versionId];
+        Attestation storage a = _attestations[versionId][msg.sender];
         if (a.blockNumber == 0) revert NoAttestation(versionId);
         a.revoked = true;
         emit AttestationRevoked(versionId, msg.sender);
     }
 
-    /// @notice Rotate the attester key. Owner only; this is the owner's only power over the registry.
-    function setAttester(address next) external onlyOwner {
-        _setAttester(next);
+    /// @notice Enable or disable a Red-Line attester. Owner only; this is the owner's only power over the
+    ///         registry. A disabled attester's attestations stop counting (see `attestationsOf`).
+    function setAttester(address account, bool enabled) external onlyOwner {
+        _setAttester(account, enabled);
     }
 
     // ── views ─────────────────────────────────────────────────────────────────────────────────────
@@ -270,9 +293,50 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         return (_targets[versionId], _permissions[versionId], _flows[versionId]);
     }
 
-    /// @return The attestation (blockNumber == 0 if there is none).
-    function getAttestation(bytes32 versionId) external view returns (Attestation memory) {
-        return _attestations[versionId];
+    /// @return The attestation `attester_` recorded for the version (blockNumber == 0 if there is none).
+    function getAttestation(bytes32 versionId, address attester_) external view returns (Attestation memory) {
+        return _attestations[versionId][attester_];
+    }
+
+    /// @notice Every attestation recorded for a version, in the order its attesters first attested.
+    /// @return list   The attestations.
+    /// @return active Whether each one counts now: its attester is still enabled and it is not revoked.
+    function attestationsOf(bytes32 versionId) external view returns (Attestation[] memory list, bool[] memory active) {
+        address[] storage by = _attestedBy[versionId];
+        list = new Attestation[](by.length);
+        active = new bool[](by.length);
+        for (uint256 i; i < by.length; ++i) {
+            Attestation storage a = _attestations[versionId][by[i]];
+            list[i] = a;
+            active[i] = isAttester[by[i]] && !a.revoked;
+        }
+    }
+
+    /// @inheritdoc ISkillRegistry
+    function checkCall(bytes32 versionId, address target, bytes4 selector, uint256 value)
+        external
+        view
+        returns (uint8)
+    {
+        if (_versions[versionId].registeredBlock == 0) return CALL_UNKNOWN_VERSION;
+        Target[] storage targets = _targets[versionId];
+        for (uint256 i; i < targets.length; ++i) {
+            Target storage t = targets[i];
+            if (t.target != target) continue;
+            Permission[] storage permissions = _permissions[versionId];
+            bool declared;
+            for (uint256 j; j < permissions.length; ++j) {
+                if (permissions[j].targetIndex == i && permissions[j].selector == selector) {
+                    declared = true;
+                    break;
+                }
+            }
+            if (!declared) return CALL_UNDECLARED_FUNCTION;
+            if (value > t.maxValue) return CALL_VALUE_OVER_CAP;
+            if (target.codehash != t.codehash) return CALL_CODE_CHANGED;
+            return CALL_OK;
+        }
+        return CALL_UNDECLARED_TARGET;
     }
 
     function versionCount() external view returns (uint256) {
@@ -399,9 +463,14 @@ contract SkillRegistry is ISkillRegistry, AgentIdGated, Ownable2Step {
         }
     }
 
-    function _setAttester(address next) private {
-        emit AttesterChanged(attester, next);
-        attester = next;
+    function _setAttester(address account, bool enabled) private {
+        if (account == address(0)) revert ZeroAttester();
+        if (isAttester[account] == enabled) return;
+        if (enabled && attesterCount >= MAX_ATTESTERS) revert TooMany(attesterCount + 1, MAX_ATTESTERS);
+        isAttester[account] = enabled;
+        if (enabled) ++attesterCount;
+        else --attesterCount;
+        emit AttesterSet(account, enabled);
     }
 
     /// @dev Reads `owner()` without trusting the target: bounded gas, at most 32 bytes copied (a large

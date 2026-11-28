@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 import {SkillRegistry} from "../src/SkillRegistry.sol";
 import {Countersign} from "../src/Countersign.sol";
+import {GuardedExecutor} from "../src/GuardedExecutor.sol";
 import {IAgentID} from "../src/interfaces/IAgentID.sol";
 import {ISkillRegistry} from "../src/interfaces/ISkillRegistry.sol";
 import {MockAgentID} from "../test/mocks/MockAgentID.sol";
@@ -40,11 +41,13 @@ contract DeployLocal is Script {
         }
         SkillRegistry registry = new SkillRegistry(IAgentID(address(agentId)), deployer, ANVIL_ATTESTER);
         Countersign countersign = new Countersign(IAgentID(address(agentId)), ISkillRegistry(address(registry)));
+        GuardedExecutor executor = new GuardedExecutor(ISkillRegistry(address(registry)));
         vm.stopBroadcast();
 
         console2.log("MockAgentID  ", address(agentId));
         console2.log("SkillRegistry", address(registry));
         console2.log("Countersign  ", address(countersign));
+        console2.log("Executor     ", address(executor));
 
         string memory k = "deployment";
         vm.serializeUint(k, "chainId", block.chainid);
@@ -54,7 +57,8 @@ contract DeployLocal is Script {
         vm.serializeAddress(k, "attester", ANVIL_ATTESTER);
         vm.serializeAddress(k, "deployer", deployer);
         vm.serializeAddress(k, "skillRegistry", address(registry));
-        string memory json = vm.serializeAddress(k, "countersign", address(countersign));
+        vm.serializeAddress(k, "countersign", address(countersign));
+        string memory json = vm.serializeAddress(k, "guardedExecutor", address(executor));
         vm.writeJson(json, "deployments/31337.json");
     }
 }

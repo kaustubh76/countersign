@@ -11,6 +11,7 @@ const out = resolve(here, "../../../contracts/out");
 const contracts = [
   ["skillRegistryAbi", "SkillRegistry.sol/SkillRegistry.json"],
   ["countersignAbi", "Countersign.sol/Countersign.json"],
+  ["guardedExecutorAbi", "GuardedExecutor.sol/GuardedExecutor.json"],
   ["agentIdAbi", "IAgentID.sol/IAgentID.json"],
 ] as const;
 

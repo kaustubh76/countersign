@@ -19746,6 +19746,84 @@ var skillRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "CALL_CODE_CHANGED",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "CALL_OK",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "CALL_UNDECLARED_FUNCTION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "CALL_UNDECLARED_TARGET",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "CALL_UNKNOWN_VERSION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "CALL_VALUE_OVER_CAP",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "FLOW_APPROVE",
     "inputs": [],
     "outputs": [
@@ -19766,6 +19844,32 @@ var skillRegistryAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_ATTESTATIONS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_ATTESTERS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -19890,13 +19994,74 @@ var skillRegistryAbi = [
   },
   {
     "type": "function",
-    "name": "attester",
+    "name": "attestationsOf",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "list",
+        "type": "tuple[]",
+        "internalType": "struct SkillRegistry.Attestation[]",
+        "components": [
+          {
+            "name": "attester",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "blockNumber",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "rulesChecked",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "rulesPassed",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "checkerCommit",
+            "type": "bytes20",
+            "internalType": "bytes20"
+          },
+          {
+            "name": "revoked",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "reportHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      },
+      {
+        "name": "active",
+        "type": "bool[]",
+        "internalType": "bool[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "attesterCount",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "address",
-        "internalType": "address"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -19926,6 +20091,40 @@ var skillRegistryAbi = [
         "name": "registeredBlock",
         "type": "uint64",
         "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "checkCall",
+    "inputs": [
+      {
+        "name": "versionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "target",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "selector",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "stateMutability": "view"
@@ -20075,6 +20274,11 @@ var skillRegistryAbi = [
         "name": "versionId",
         "type": "bytes32",
         "internalType": "bytes32"
+      },
+      {
+        "name": "attester_",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -20276,6 +20480,25 @@ var skillRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "isAttester",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -20420,9 +20643,14 @@ var skillRegistryAbi = [
     "name": "setAttester",
     "inputs": [
       {
-        "name": "next",
+        "name": "account",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "enabled",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -20614,19 +20842,19 @@ var skillRegistryAbi = [
   },
   {
     "type": "event",
-    "name": "AttesterChanged",
+    "name": "AttesterSet",
     "inputs": [
       {
-        "name": "previous",
+        "name": "account",
         "type": "address",
         "indexed": true,
         "internalType": "address"
       },
       {
-        "name": "next",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        "name": "enabled",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -20933,6 +21161,11 @@ var skillRegistryAbi = [
         "internalType": "bytes32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "ZeroAttester",
+    "inputs": []
   },
   {
     "type": "error",
@@ -21565,6 +21798,9 @@ var MANIFEST_SCHEMA = "countersign.manifest/v1";
 var MANIFEST_FILE = "countersign.json";
 var RULESET_VERSION = "countersign.ruleset/v1";
 var HARMFUL_REDLINE_RULES = ["RL1", "RL2", "RL3", "RL6"];
+var redlineBit = (rule) => 1 << Number(rule.replace(/^RL/, "")) - 1;
+var HARMFUL_REDLINE_MASK = HARMFUL_REDLINE_RULES.reduce((mask, r) => mask | redlineBit(r), 0);
+var OWNER_POWERS_BIT = redlineBit("RL4");
 var FLAG_ANCHOR = 1;
 var FLAG_PULL = 2;
 var FLOW_APPROVE = 0;
@@ -21636,6 +21872,7 @@ function parseDeploymentJson(json) {
     agentId: addr("agentId"),
     skillRegistry: addr("skillRegistry"),
     countersign: addr("countersign"),
+    ...typeof j.guardedExecutor === "string" ? { guardedExecutor: getAddress(j.guardedExecutor) } : {},
     deployBlock: BigInt(String(j.deployBlock ?? 0))
   };
   if (chainId === BSC_CHAIN_ID && deployment.agentId !== AGENT_ID_BSC) {
@@ -21979,6 +22216,9 @@ async function readSkillDir(root) {
 }
 
 // ../core/src/views.ts
+var FORWARDER_ABI = [
+  { type: "function", name: "isTrustedForwarder", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "bool" }] }
+];
 async function readVersion(reader, d, versionId) {
   const c = reader.client;
   const v = await c.readContract({ address: d.skillRegistry, abi: skillRegistryAbi, functionName: "getVersion", args: [versionId] });
@@ -21989,7 +22229,18 @@ async function readVersion(reader, d, versionId) {
     functionName: "getManifest",
     args: [versionId]
   });
-  const a = await c.readContract({ address: d.skillRegistry, abi: skillRegistryAbi, functionName: "getAttestation", args: [versionId] });
+  const [list2, active] = await c.readContract({ address: d.skillRegistry, abi: skillRegistryAbi, functionName: "attestationsOf", args: [versionId] });
+  const executor = d.guardedExecutor;
+  const guarded = await Promise.all(
+    targets.map(async (t) => {
+      if (!executor || (t.flags & FLAG_ANCHOR) === 0) return false;
+      try {
+        return await c.readContract({ address: t.target, abi: FORWARDER_ABI, functionName: "isTrustedForwarder", args: [executor] });
+      } catch {
+        return false;
+      }
+    })
+  );
   return {
     versionId,
     contentHash: v.contentHash,
@@ -21999,10 +22250,10 @@ async function readVersion(reader, d, versionId) {
     registeredBlock: v.registeredBlock,
     registeredAt: v.registeredAt,
     contentURI: v.contentURI,
-    targets: targets.map((t) => ({ ...t })),
+    targets: targets.map((t, i) => ({ ...t, guarded: guarded[i] ?? false })),
     permissions: permissions.map((p) => ({ targetIndex: p.targetIndex, selector: p.selector })),
     flows: flows.map((f) => ({ token: f.token, counterparty: f.counterparty, kind: f.kind, cap: f.cap })),
-    attestation: a.blockNumber === 0n ? null : { ...a }
+    attestations: list2.map((a, i) => ({ ...a, active: active[i] ?? false }))
   };
 }
 async function readVersionIds(reader, d) {
@@ -22156,6 +22407,16 @@ var EIP1967_IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3c
 var SEL_TRANSFER = "0xa9059cbb";
 var SEL_TRANSFER_FROM = "0x23b872dd";
 var EMPTY_SELECTOR = "0x00000000";
+function summarizeAttestations(list2) {
+  const active = list2.filter((a) => a.active);
+  const failing = active.filter((a) => a.rulesPassed !== a.rulesChecked);
+  const passing = active.filter((a) => a.rulesPassed === a.rulesChecked && (a.rulesChecked & HARMFUL_REDLINE_MASK) === HARMFUL_REDLINE_MASK);
+  return {
+    status: failing.length ? "failed" : passing.length ? "passed" : "none",
+    passing: passing.length,
+    ownerPowersChecked: passing.some((a) => (a.rulesChecked & OWNER_POWERS_BIT) !== 0)
+  };
+}
 var lower = (a) => a.toLowerCase();
 var topicAddress = (topic) => topic && topic.length === 66 ? getAddress(`0x${topic.slice(26)}`) : null;
 function selectorOf2(input) {
@@ -22337,22 +22598,28 @@ async function verifyVersionData(input, src) {
   }
   const declaredAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0).length;
   const endorsedAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0 && t.endorser !== zeroAddress).length;
+  const guardedAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0 && t.endorser !== zeroAddress && t.guarded === true).length;
+  const attestation = summarizeAttestations(v.attestations);
   const corroborated = backedAgents.size >= 3;
-  const status = incidents.length > 0 ? "incident" : canonical === "mismatch" || corroborated || endorsedAnchors === 0 ? "warning" : counted === 0 ? "unproven" : "ok";
+  const status = incidents.length > 0 ? "incident" : canonical === "mismatch" || corroborated || endorsedAnchors === 0 || attestation.status === "failed" ? "warning" : counted === 0 ? "unproven" : "ok";
   return {
     ruleset: RULESET_VERSION,
     versionId: v.versionId,
     computedAtBlock: input.computedAtBlock ?? null,
     canonical,
     canonicalDetail,
-    anchors: { declared: declaredAnchors, endorsed: endorsedAnchors },
-    attestation: v.attestation ? {
-      rulesChecked: v.attestation.rulesChecked,
-      rulesPassed: v.attestation.rulesPassed,
-      revoked: v.attestation.revoked,
-      reportHash: v.attestation.reportHash,
-      checkerCommit: v.attestation.checkerCommit
-    } : null,
+    anchors: { declared: declaredAnchors, endorsed: endorsedAnchors, guarded: guardedAnchors },
+    attestations: v.attestations.map((a) => ({
+      attester: a.attester,
+      blockNumber: a.blockNumber.toString(),
+      rulesChecked: a.rulesChecked,
+      rulesPassed: a.rulesPassed,
+      checkerCommit: a.checkerCommit,
+      reportHash: a.reportHash,
+      revoked: a.revoked,
+      active: a.active
+    })),
+    attestation,
     countersigns: { total: input.countersigns.length, counted, peer, rejected, rejectionReasons },
     incidents,
     claims: { total: input.reports.length - authorPullReports, backed, corroborated },
@@ -23265,9 +23532,14 @@ async function cmdCheckInstall(args) {
   if (registered && versionId) {
     reasons.push({ level: "ok", text: `registered by the publisher's Agent ID (block ${registered.registeredBlock})` });
     const { report, source } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
-    if (registered.attestation && !registered.attestation.revoked) {
-      const all = registered.attestation.rulesPassed === registered.attestation.rulesChecked;
-      reasons.push({ level: all ? "ok" : "warn", text: all ? "Red-Line attestation: all checked rules passed" : "Red-Line attestation: some rules failed" });
+    const att = report?.attestation ?? summarizeAttestations(registered.attestations);
+    if (att.status === "passed") {
+      reasons.push({
+        level: "ok",
+        text: `Red-Line attested by ${att.passing} attester${att.passing === 1 ? "" : "s"}: every rule it checked passed${att.ownerPowersChecked ? ", including owner powers (RL4)" : "; owner powers (RL4) were not checked"}`
+      });
+    } else if (att.status === "failed") {
+      reasons.push({ level: "warn", text: "a Red-Line attester recorded failed rules for this version" });
     } else {
       reasons.push({ level: "warn", text: "no Red-Line attestation" });
     }

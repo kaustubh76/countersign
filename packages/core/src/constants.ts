@@ -19,6 +19,13 @@ export const RULESET_VERSION = "countersign.ruleset/v1";
  */
 export const HARMFUL_REDLINE_RULES: readonly string[] = ["RL1", "RL2", "RL3", "RL6"];
 
+/** A Red-Line rule's bit in the on-chain rulesChecked / rulesPassed masks: RLn is bit n - 1. */
+export const redlineBit = (rule: string): number => 1 << (Number(rule.replace(/^RL/, "")) - 1);
+/** An attestation only counts as a pass if it checked every harmful rule (and all it checked passed). */
+export const HARMFUL_REDLINE_MASK: number = HARMFUL_REDLINE_RULES.reduce((mask, r) => mask | redlineBit(r), 0);
+/** RL4: owner powers read from the contracts' verified source. */
+export const OWNER_POWERS_BIT: number = redlineBit("RL4");
+
 export const FLAG_ANCHOR = 1;
 export const FLAG_PULL = 2;
 export const FLOW_APPROVE = 0;

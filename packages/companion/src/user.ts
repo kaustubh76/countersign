@@ -17,6 +17,7 @@ import {
   readRecords,
   readVersion,
   readVersionsByContent,
+  summarizeAttestations,
   type ParsedManifest,
   type RecordView,
   type VersionView,
@@ -96,9 +97,14 @@ export async function cmdCheckInstall(args: Args): Promise<Result> {
   if (registered && versionId) {
     reasons.push({ level: "ok", text: `registered by the publisher's Agent ID (block ${registered.registeredBlock})` });
     const { report, source } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
-    if (registered.attestation && !registered.attestation.revoked) {
-      const all = registered.attestation.rulesPassed === registered.attestation.rulesChecked;
-      reasons.push({ level: all ? "ok" : "warn", text: all ? "Red-Line attestation: all checked rules passed" : "Red-Line attestation: some rules failed" });
+    const att = report?.attestation ?? summarizeAttestations(registered.attestations);
+    if (att.status === "passed") {
+      reasons.push({
+        level: "ok",
+        text: `Red-Line attested by ${att.passing} attester${att.passing === 1 ? "" : "s"}: every rule it checked passed${att.ownerPowersChecked ? ", including owner powers (RL4)" : "; owner powers (RL4) were not checked"}`,
+      });
+    } else if (att.status === "failed") {
+      reasons.push({ level: "warn", text: "a Red-Line attester recorded failed rules for this version" });
     } else {
       reasons.push({ level: "warn", text: "no Red-Line attestation" });
     }

@@ -37,10 +37,30 @@ export default async function VersionPage({ params }: { params: Promise<{ versio
       ),
     },
     { state: r.anchors.endorsed > 0 ? "pass" : "fail", title: `Anchors endorsed: ${r.anchors.endorsed} of ${r.anchors.declared}`, detail: "countersigns must hit one of these" },
+    ...(r.anchors.guarded > 0
+      ? [{ state: "pass", title: `Guarded on-chain: ${r.anchors.guarded} of ${r.anchors.endorsed} anchors`, detail: "calls through the GuardedExecutor revert outside the manifest" }]
+      : []),
     {
-      state: r.attestation ? (r.attestation.revoked ? "warn" : r.attestation.rulesPassed === r.attestation.rulesChecked ? "pass" : "fail") : "skip",
-      title: `Red-Line attestation: ${r.attestation ? (r.attestation.revoked ? "revoked" : r.attestation.rulesPassed === r.attestation.rulesChecked ? "passed" : "failed") : "none"}`,
-      detail: r.attestation ? <span className="hash">{r.attestation.reportHash}</span> : "anyone can re-run the check",
+      state: r.attestation.status === "passed" ? "pass" : r.attestation.status === "failed" ? "fail" : "skip",
+      title:
+        r.attestation.status === "passed"
+          ? `Red-Line attested by ${r.attestation.passing} attester${r.attestation.passing === 1 ? "" : "s"}${r.attestation.ownerPowersChecked ? ", owner powers included" : ""}`
+          : r.attestation.status === "failed"
+            ? "Red-Line attestation: an attester recorded failed rules"
+            : "Red-Line attestation: none yet",
+      detail: r.attestations.filter((a) => a.active).length ? (
+        <>
+          {r.attestations
+            .filter((a) => a.active)
+            .map((a) => (
+              <div key={a.attester} className="hash">
+                {a.reportHash}
+              </div>
+            ))}
+        </>
+      ) : (
+        "anyone can re-run the check"
+      ),
     },
     {
       state: "info",

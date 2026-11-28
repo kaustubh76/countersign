@@ -6,6 +6,8 @@ export interface Deployment {
   agentId: Address;
   skillRegistry: Address;
   countersign: Address;
+  /** The opt-in GuardedExecutor (absent on deployments that predate it). */
+  guardedExecutor?: Address;
   /** First block worth scanning for this deployment (registry creation). */
   deployBlock: bigint;
 }
@@ -36,6 +38,7 @@ export function parseDeploymentJson(json: unknown): Deployment {
     agentId: addr("agentId"),
     skillRegistry: addr("skillRegistry"),
     countersign: addr("countersign"),
+    ...(typeof j.guardedExecutor === "string" ? { guardedExecutor: getAddress(j.guardedExecutor) } : {}),
     deployBlock: BigInt(String(j.deployBlock ?? 0)),
   };
   if (chainId === BSC_CHAIN_ID && deployment.agentId !== AGENT_ID_BSC) {

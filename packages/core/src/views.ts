@@ -1,6 +1,6 @@
 import { keccak256, toBytes, type Address, type Hex } from "viem";
 import { agentIdAbi, countersignAbi, skillRegistryAbi } from "./abi.js";
-import { KIND_COUNTERSIGN, LIMITS } from "./constants.js";
+import { FLAG_ANCHOR, KIND_COUNTERSIGN, LIMITS } from "./constants.js";
 import type { Deployment } from "./deployments.js";
 import type { Flow, Permission } from "./manifest.js";
 import type { ChainReader } from "./rpc.js";
@@ -12,6 +12,8 @@ export interface OnchainTarget {
   flags: number;
   endorser: Address;
   codehash: Hex;
+  /** An anchor that trusts the deployment's GuardedExecutor as its forwarder (read live; false if unknown). */
+  guarded?: boolean;
 }
 
 export interface AttestationView {
@@ -22,6 +24,8 @@ export interface AttestationView {
   checkerCommit: Hex;
   revoked: boolean;
   reportHash: Hex;
+  /** Counts now: the attester is still enabled and the attestation is not revoked. */
+  active: boolean;
 }
 
 export interface VersionView {
@@ -36,8 +40,13 @@ export interface VersionView {
   targets: OnchainTarget[];
   permissions: Permission[];
   flows: Flow[];
-  attestation: AttestationView | null;
+  /** Every Red-Line attestation recorded for the version, by attester. */
+  attestations: AttestationView[];
 }
+
+const FORWARDER_ABI = [
+  { type: "function", name: "isTrustedForwarder", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "bool" }] },
+] as const;
 
 export interface RecordView {
   versionId: Hex;
@@ -58,7 +67,18 @@ export async function readVersion(reader: ChainReader, d: Deployment, versionId:
     functionName: "getManifest",
     args: [versionId],
   });
-  const a = await c.readContract({ address: d.skillRegistry, abi: skillRegistryAbi, functionName: "getAttestation", args: [versionId] });
+  const [list, active] = await c.readContract({ address: d.skillRegistry, abi: skillRegistryAbi, functionName: "attestationsOf", args: [versionId] });
+  const executor = d.guardedExecutor;
+  const guarded = await Promise.all(
+    targets.map(async (t) => {
+      if (!executor || (t.flags & FLAG_ANCHOR) === 0) return false;
+      try {
+        return await c.readContract({ address: t.target, abi: FORWARDER_ABI, functionName: "isTrustedForwarder", args: [executor] });
+      } catch {
+        return false; // not an ERC-2771 contract
+      }
+    }),
+  );
   return {
     versionId,
     contentHash: v.contentHash,
@@ -68,10 +88,10 @@ export async function readVersion(reader: ChainReader, d: Deployment, versionId:
     registeredBlock: v.registeredBlock,
     registeredAt: v.registeredAt,
     contentURI: v.contentURI,
-    targets: targets.map((t) => ({ ...t })),
+    targets: targets.map((t, i) => ({ ...t, guarded: guarded[i] ?? false })),
     permissions: permissions.map((p) => ({ targetIndex: p.targetIndex, selector: p.selector })),
     flows: flows.map((f) => ({ token: f.token, counterparty: f.counterparty, kind: f.kind, cap: f.cap })),
-    attestation: a.blockNumber === 0n ? null : { ...a },
+    attestations: list.map((a, i) => ({ ...a, active: active[i] ?? false })),
   };
 }
 

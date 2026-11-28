@@ -116,7 +116,9 @@ export interface VersionSummary {
   peer: number;
   incidents: number;
   claims: number;
-  attestation: "passed" | "failed" | "revoked" | "none";
+  attestation: "passed" | "failed" | "none";
+  /** Active, passing Red-Line attestations (by distinct attesters). */
+  attestedBy: number;
   report: PublicReport;
 }
 
@@ -158,7 +160,6 @@ async function buildIndex(): Promise<IndexData> {
     for (const [versionId, v] of snap.versions) {
       const report = await verifyFromSnapshot(snap, base.chainId, versionId, src, { staticCheck });
       if (!report) continue;
-      const a = v.attestation;
       versions.push({
         versionId,
         name: nameFromUri(v.contentURI),
@@ -171,7 +172,8 @@ async function buildIndex(): Promise<IndexData> {
         peer: report.countersigns.peer,
         incidents: report.incidents.length,
         claims: report.claims.total,
-        attestation: !a ? "none" : a.revoked ? "revoked" : a.rulesPassed === a.rulesChecked ? "passed" : "failed",
+        attestation: report.attestation.status,
+        attestedBy: report.attestation.passing,
         report: { ...report, computedAtBlock: report.computedAtBlock?.toString() ?? null },
       });
     }
@@ -194,7 +196,7 @@ async function buildIndex(): Promise<IndexData> {
 }
 
 /** The full index, recomputed at most once a minute and served stale while it refreshes. */
-export const getIndex = unstable_cache(buildIndex, ["countersign-index-v1"], { revalidate: 60, tags: ["index"] });
+export const getIndex = unstable_cache(buildIndex, ["countersign-index-v2"], { revalidate: 60, tags: ["index"] });
 
 export async function getVersionSummary(versionId: string): Promise<VersionSummary | null> {
   const index = await getIndex();

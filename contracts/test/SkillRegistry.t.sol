@@ -6,7 +6,7 @@ import {Base} from "./Base.t.sol";
 import {SkillRegistry} from "../src/SkillRegistry.sol";
 import {AgentIdGated} from "../src/AgentIdGated.sol";
 import {IAgentID} from "../src/interfaces/IAgentID.sol";
-import {OwnedTarget, ReturnBombTarget, DirtyOwnerTarget} from "./mocks/Targets.sol";
+import {OwnedTarget, PlainTarget, ReturnBombTarget, DirtyOwnerTarget} from "./mocks/Targets.sol";
 
 contract SkillRegistryTest is Base {
     // ── register ──────────────────────────────────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ contract SkillRegistryTest is Base {
         emit SkillRegistry.Attested(versionId, attester, 0x7f, 0x3f, commit, report);
         vm.prank(attester);
         registry.attest(versionId, 0x7f, 0x3f, commit, report);
-        SkillRegistry.Attestation memory a = registry.getAttestation(versionId);
+        SkillRegistry.Attestation memory a = registry.getAttestation(versionId, attester);
         assertEq(a.attester, attester);
         assertEq(a.blockNumber, block.number);
         assertEq(a.rulesChecked, 0x7f);
@@ -268,28 +268,100 @@ contract SkillRegistryTest is Base {
         assertEq(a.reportHash, report);
         assertFalse(a.revoked);
 
-        vm.expectRevert(SkillRegistry.NotAttester.selector);
+        // only your own attestation can be revoked
+        vm.expectRevert(abi.encodeWithSelector(SkillRegistry.NoAttestation.selector, versionId));
         registry.revokeAttestation(versionId);
         vm.prank(attester);
         registry.revokeAttestation(versionId);
-        assertTrue(registry.getAttestation(versionId).revoked);
+        assertTrue(registry.getAttestation(versionId, attester).revoked);
+        (, bool[] memory active) = registry.attestationsOf(versionId);
+        assertFalse(active[0], "a revoked attestation does not count");
 
         vm.expectRevert(abi.encodeWithSelector(SkillRegistry.NoAttestation.selector, bytes32(uint256(9))));
         vm.prank(attester);
         registry.revokeAttestation(bytes32(uint256(9)));
     }
 
-    function test_SetAttester_OnlyOwner() public {
+    function test_MultipleAttesters_IndependentAndOnlyEnabledCount() public {
+        bytes32 versionId = _register(alice, CONTENT);
+        address second = makeAddr("second-attester");
+        vm.prank(owner);
+        registry.setAttester(second, true);
+        assertEq(registry.attesterCount(), 2);
+
+        vm.prank(attester);
+        registry.attest(versionId, 0xff, 0xff, bytes20(uint160(1)), keccak256("r1"));
+        vm.prank(second);
+        registry.attest(versionId, 0xf7, 0xf7, bytes20(uint160(2)), keccak256("r2"));
+        // a fresh attestation by the same attester replaces its previous one, without a new entry
+        vm.prank(second);
+        registry.attest(versionId, 0xff, 0xff, bytes20(uint160(3)), keccak256("r3"));
+
+        (SkillRegistry.Attestation[] memory list, bool[] memory active) = registry.attestationsOf(versionId);
+        assertEq(list.length, 2);
+        assertEq(list[0].attester, attester);
+        assertEq(list[1].attester, second);
+        assertEq(list[1].reportHash, keccak256("r3"));
+        assertTrue(active[0] && active[1]);
+
+        // the owner retires the first attester: its attestation stops counting, and it can no longer attest
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit SkillRegistry.AttesterSet(attester, false);
+        vm.prank(owner);
+        registry.setAttester(attester, false);
+        (, active) = registry.attestationsOf(versionId);
+        assertFalse(active[0]);
+        assertTrue(active[1]);
+        vm.expectRevert(SkillRegistry.NotAttester.selector);
+        vm.prank(attester);
+        registry.attest(versionId, 0xff, 0xff, bytes20(0), bytes32(0));
+        // ...but it can still take back what it signed
+        vm.prank(attester);
+        registry.revokeAttestation(versionId);
+        assertTrue(registry.getAttestation(versionId, attester).revoked);
+    }
+
+    function test_SetAttester_OnlyOwner_NoZero_Capped() public {
         address next = makeAddr("next-attester");
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
         vm.prank(alice);
-        registry.setAttester(next);
+        registry.setAttester(next, true);
+
+        vm.expectRevert(SkillRegistry.ZeroAttester.selector);
+        vm.prank(owner);
+        registry.setAttester(address(0), true);
 
         vm.expectEmit(true, true, true, true, address(registry));
-        emit SkillRegistry.AttesterChanged(attester, next);
+        emit SkillRegistry.AttesterSet(next, true);
         vm.prank(owner);
-        registry.setAttester(next);
-        assertEq(registry.attester(), next);
+        registry.setAttester(next, true);
+        assertTrue(registry.isAttester(next));
+        vm.prank(owner);
+        registry.setAttester(next, true); // idempotent
+        assertEq(registry.attesterCount(), 2);
+
+        for (uint256 i = 2; i < registry.MAX_ATTESTERS(); ++i) {
+            vm.prank(owner);
+            registry.setAttester(makeAddr(string.concat("attester-", vm.toString(i))), true);
+        }
+        assertEq(registry.attesterCount(), registry.MAX_ATTESTERS());
+        vm.expectRevert(abi.encodeWithSelector(SkillRegistry.TooMany.selector, 17, 16));
+        vm.prank(owner);
+        registry.setAttester(makeAddr("one-too-many"), true);
+    }
+
+    function test_CheckCall_EveryCode() public {
+        bytes32 versionId = _register(alice, CONTENT);
+        bytes4 ping = OwnedTarget.ping.selector;
+        assertEq(registry.checkCall(versionId, address(anchorTarget), ping, 0), registry.CALL_OK());
+        assertEq(registry.checkCall(versionId, address(shared), PlainTarget.ping.selector, 1 ether), registry.CALL_OK());
+        assertEq(registry.checkCall(keccak256("nope"), address(anchorTarget), ping, 0), registry.CALL_UNKNOWN_VERSION());
+        assertEq(registry.checkCall(versionId, address(this), ping, 0), registry.CALL_UNDECLARED_TARGET());
+        assertEq(registry.checkCall(versionId, address(anchorTarget), bytes4(0xdeadbeef), 0), registry.CALL_UNDECLARED_FUNCTION());
+        assertEq(registry.checkCall(versionId, address(shared), PlainTarget.ping.selector, 1 ether + 1), registry.CALL_VALUE_OVER_CAP());
+        assertEq(registry.checkCall(versionId, address(anchorTarget), ping, 1), registry.CALL_VALUE_OVER_CAP());
+        vm.etch(address(anchorTarget), address(shared).code);
+        assertEq(registry.checkCall(versionId, address(anchorTarget), ping, 0), registry.CALL_CODE_CHANGED());
     }
 
     function test_Ownership_IsTwoStep() public {
@@ -324,7 +396,9 @@ contract SkillRegistryTest is Base {
         bytes32 nope = keccak256("nope");
         assertFalse(registry.exists(nope));
         assertEq(registry.getVersion(nope).registeredBlock, 0);
-        assertEq(registry.getAttestation(nope).blockNumber, 0);
+        assertEq(registry.getAttestation(nope, attester).blockNumber, 0);
+        (SkillRegistry.Attestation[] memory list,) = registry.attestationsOf(nope);
+        assertEq(list.length, 0);
         (address r,, uint64 b) = registry.authorOf(nope);
         assertEq(r, address(0));
         assertEq(b, 0);

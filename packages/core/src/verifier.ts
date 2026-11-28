@@ -11,10 +11,22 @@ import {
   type Transaction,
   type TransactionReceipt,
 } from "viem";
-import { FLAG_ANCHOR, FLAG_PULL, FLOW_APPROVE, FLOW_TRANSFER, HARMFUL_REDLINE_RULES, KIND_COUNTERSIGN, MANIFEST_FILE, RULESET_VERSION, SESSION_WINDOW_BLOCKS } from "./constants.js";
+import {
+  FLAG_ANCHOR,
+  FLAG_PULL,
+  FLOW_APPROVE,
+  FLOW_TRANSFER,
+  HARMFUL_REDLINE_MASK,
+  HARMFUL_REDLINE_RULES,
+  KIND_COUNTERSIGN,
+  MANIFEST_FILE,
+  OWNER_POWERS_BIT,
+  RULESET_VERSION,
+  SESSION_WINDOW_BLOCKS,
+} from "./constants.js";
 import { parseManifest } from "./manifest.js";
 import { hashSkillFiles, type SkillFile } from "./skillHash.js";
-import type { RecordView, VersionView } from "./views.js";
+import type { AttestationView, RecordView, VersionView } from "./views.js";
 
 /**
  * Ruleset countersign.ruleset/v1: decides, from chain data alone, whether each countersign counts and
@@ -83,6 +95,39 @@ export interface Incident {
 }
 
 export type CanonicalStatus = "verified" | "mismatch" | "unavailable" | "skipped";
+
+/** One Red-Line attestation as published (block number as a string, so the report stays JSON). */
+export interface AttestationRecord {
+  attester: Address;
+  blockNumber: string;
+  rulesChecked: number;
+  rulesPassed: number;
+  checkerCommit: Hex;
+  reportHash: Hex;
+  revoked: boolean;
+  active: boolean;
+}
+
+export interface AttestationSummary {
+  /** passed: an active attestation checked every harmful rule and all it checked passed, and none failed. */
+  status: "passed" | "failed" | "none";
+  /** How many active attestations pass. */
+  passing: number;
+  /** Whether a passing attestation also checked RL4 (owner powers from verified source). */
+  ownerPowersChecked: boolean;
+}
+
+/** What the attestations on a version add up to. Revoked ones, and ones by retired attesters, do not count. */
+export function summarizeAttestations(list: readonly Pick<AttestationView, "rulesChecked" | "rulesPassed" | "active">[]): AttestationSummary {
+  const active = list.filter((a) => a.active);
+  const failing = active.filter((a) => a.rulesPassed !== a.rulesChecked);
+  const passing = active.filter((a) => a.rulesPassed === a.rulesChecked && (a.rulesChecked & HARMFUL_REDLINE_MASK) === HARMFUL_REDLINE_MASK);
+  return {
+    status: failing.length ? "failed" : passing.length ? "passed" : "none",
+    passing: passing.length,
+    ownerPowersChecked: passing.some((a) => (a.rulesChecked & OWNER_POWERS_BIT) !== 0),
+  };
+}
 export type VersionStatus = "incident" | "warning" | "unproven" | "ok";
 
 export interface VersionReport {
@@ -91,8 +136,10 @@ export interface VersionReport {
   computedAtBlock: bigint | null;
   canonical: CanonicalStatus;
   canonicalDetail: string[];
-  anchors: { declared: number; endorsed: number };
-  attestation: { rulesChecked: number; rulesPassed: number; revoked: boolean; reportHash: Hex; checkerCommit: Hex } | null;
+  /** guarded: endorsed anchors that trust the GuardedExecutor, so guarded calls revert outside the manifest. */
+  anchors: { declared: number; endorsed: number; guarded: number };
+  attestations: AttestationRecord[];
+  attestation: AttestationSummary;
   countersigns: { total: number; counted: number; peer: number; rejected: number; rejectionReasons: Record<string, number> };
   incidents: Incident[];
   claims: { total: number; backed: number; corroborated: boolean };
@@ -337,11 +384,13 @@ export async function verifyVersionData(input: VerifyInput, src: TxSource): Prom
 
   const declaredAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0).length;
   const endorsedAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0 && t.endorser !== zeroAddress).length;
+  const guardedAnchors = v.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0 && t.endorser !== zeroAddress && t.guarded === true).length;
+  const attestation = summarizeAttestations(v.attestations);
   const corroborated = backedAgents.size >= 3;
   const status: VersionStatus =
     incidents.length > 0
       ? "incident"
-      : canonical === "mismatch" || corroborated || endorsedAnchors === 0
+      : canonical === "mismatch" || corroborated || endorsedAnchors === 0 || attestation.status === "failed"
         ? "warning"
         : counted === 0
           ? "unproven"
@@ -353,16 +402,18 @@ export async function verifyVersionData(input: VerifyInput, src: TxSource): Prom
     computedAtBlock: input.computedAtBlock ?? null,
     canonical,
     canonicalDetail,
-    anchors: { declared: declaredAnchors, endorsed: endorsedAnchors },
-    attestation: v.attestation
-      ? {
-          rulesChecked: v.attestation.rulesChecked,
-          rulesPassed: v.attestation.rulesPassed,
-          revoked: v.attestation.revoked,
-          reportHash: v.attestation.reportHash,
-          checkerCommit: v.attestation.checkerCommit,
-        }
-      : null,
+    anchors: { declared: declaredAnchors, endorsed: endorsedAnchors, guarded: guardedAnchors },
+    attestations: v.attestations.map((a) => ({
+      attester: a.attester,
+      blockNumber: a.blockNumber.toString(),
+      rulesChecked: a.rulesChecked,
+      rulesPassed: a.rulesPassed,
+      checkerCommit: a.checkerCommit,
+      reportHash: a.reportHash,
+      revoked: a.revoked,
+      active: a.active,
+    })),
+    attestation,
     countersigns: { total: input.countersigns.length, counted, peer, rejected, rejectionReasons },
     incidents,
     claims: { total: input.reports.length - authorPullReports, backed, corroborated },

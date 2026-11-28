@@ -49,3 +49,45 @@ contract DirtyOwnerTarget {
         }
     }
 }
+
+/// @notice An author-owned contract that opts into the GuardedExecutor: it trusts the executor as its ERC-2771
+///         forwarder and reads the real caller from the appended address.
+contract GuardedTarget {
+    address public owner;
+    address public immutable FORWARDER;
+    uint256 public pings;
+    address public lastSender;
+
+    constructor(address owner_, address forwarder) {
+        owner = owner_;
+        FORWARDER = forwarder;
+    }
+
+    function isTrustedForwarder(address forwarder) public view returns (bool) {
+        return forwarder == FORWARDER;
+    }
+
+    function ping() external {
+        ++pings;
+        lastSender = _msgSender();
+    }
+
+    /// @notice A function the demo manifest does not declare.
+    function sweep() external {
+        ++pings;
+    }
+
+    function boom() external pure {
+        revert("boom");
+    }
+
+    function _msgSender() internal view returns (address sender) {
+        if (msg.sender == FORWARDER && msg.data.length >= 24) {
+            assembly ("memory-safe") {
+                sender := shr(96, calldataload(sub(calldatasize(), 20)))
+            }
+        } else {
+            sender = msg.sender;
+        }
+    }
+}

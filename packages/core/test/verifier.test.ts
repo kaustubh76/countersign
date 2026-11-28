@@ -17,6 +17,7 @@ import {
   EIP1967_IMPL_SLOT,
   TOPIC_APPROVAL,
   TOPIC_TRANSFER,
+  summarizeAttestations,
   verifyVersionData,
   type TxSource,
   type VerifyInput,
@@ -70,7 +71,7 @@ function version(over: Partial<VersionView> = {}): VersionView {
       { token: TOKEN, counterparty: APP, kind: 0, cap: 100n },
       { token: TOKEN, counterparty: CAROL, kind: 1, cap: 50n },
     ],
-    attestation: null,
+    attestations: [],
     ...over,
   };
 }
@@ -395,5 +396,36 @@ describe("C1 canonical content", () => {
   it("unavailable when the content cannot be fetched", async () => {
     const r = await verifyVersionData(input({ content: null, contentError: "404" }), new FakeChain());
     expect(r).toMatchObject({ canonical: "unavailable", canonicalDetail: ["404"] });
+  });
+});
+
+describe("Red-Line attestations (several attesters)", () => {
+  const RL4 = 1 << 3;
+  const HARMFUL = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 5);
+  const a = (rulesChecked: number, rulesPassed: number, active = true) => ({ rulesChecked, rulesPassed, active });
+
+  it("passes only when an active attestation checked every harmful rule and all it checked passed", () => {
+    expect(summarizeAttestations([])).toEqual({ status: "none", passing: 0, ownerPowersChecked: false });
+    // an empty mask "passes" every rule it checked, which is none: it must not count
+    expect(summarizeAttestations([a(0, 0)]).status).toBe("none");
+    expect(summarizeAttestations([a(HARMFUL, HARMFUL)])).toEqual({ status: "passed", passing: 1, ownerPowersChecked: false });
+    expect(summarizeAttestations([a(0xff, 0xff), a(HARMFUL, HARMFUL)])).toEqual({ status: "passed", passing: 2, ownerPowersChecked: true });
+    expect(summarizeAttestations([a(0xff & ~RL4, 0xff & ~RL4)]).ownerPowersChecked).toBe(false);
+  });
+
+  it("a failed rule from any active attester wins; revoked or retired attesters do not count", () => {
+    expect(summarizeAttestations([a(0xff, 0xff), a(0xff, 0xfe)]).status).toBe("failed");
+    expect(summarizeAttestations([a(0xff, 0xff), a(0xff, 0xfe, false)])).toEqual({ status: "passed", passing: 1, ownerPowersChecked: true });
+    expect(summarizeAttestations([a(0xff, 0xff, false)]).status).toBe("none");
+  });
+
+  it("a failed attestation puts the version on warning, and the report keeps every attestation", async () => {
+    const att = (rulesPassed: number, active: boolean) => ({
+      attester: CAROL, blockNumber: 7n, rulesChecked: 0xff, rulesPassed, checkerCommit: "0x01" as Hex, revoked: !active, reportHash: "0x02" as Hex, active,
+    });
+    const r = await verifyVersionData(input({ version: version({ attestations: [att(0xfe, true)] }) }), new FakeChain());
+    expect(r.attestation.status).toBe("failed");
+    expect(r.status).toBe("warning");
+    expect(r.attestations).toEqual([expect.objectContaining({ blockNumber: "7", active: true })]);
   });
 });

@@ -156,7 +156,7 @@ export function versionFor(files: SkillFile[], opts: { proxy?: boolean; registra
     })),
     permissions: parsed.onchain.permissions,
     flows: parsed.onchain.flows,
-    attestation: null,
+    attestations: [],
   };
 }
 
