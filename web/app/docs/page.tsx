@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeBlock } from "@/components/CodeBlock";
 import { Stamp } from "@/components/Stamp";
+import type { ApiEndpoint } from "@/lib/apiConsole";
 import { getChainPulse } from "@/lib/chain";
 import { getIndex } from "@/lib/data";
-import { bscscan, INSTALL_CMD, REPO_URL, RULESET, SITE_URL } from "@/lib/site";
+import { bscscan, COMMIT_SHA, INSTALL_CMD, REPO_URL, RULESET, SITE_URL } from "@/lib/site";
+import { ApiConsole } from "./ApiConsole";
 
 export const metadata: Metadata = { title: "Docs", description: "The COUNTERSIGN ruleset, on-chain guarantees, counts-only API, and how to verify everything yourself." };
 export const revalidate = 300;
@@ -21,18 +23,23 @@ const RULES: { id: string; kind: "counts" | "incident" | "claim"; title: string;
   { id: "—", kind: "claim", title: "Any other report", body: "Shown as a claim, never decisive. Three independent reporters with real sessions raise a warning, never an incident." },
 ];
 
-const API: [string, string, string][] = [
-  ["GET", "/api/v1/stats", "totals"],
-  ["GET", "/api/v1/versions", "every version with its counts"],
-  ["GET", "/api/v1/version/<id>", "one verified report"],
-  ["GET", "/api/v1/badge/<id>.svg", "README badge"],
-  ["GET", "/api/v1/chain", "live block, registry, deploy status"],
-  ["POST", "/api/v1/check", "Red-Line Check of a GitHub folder"],
-];
+/** Until a version is registered, the id endpoints are tried with an all-zero id (an honest "not registered"). */
+const ZERO_ID = `0x${"0".repeat(64)}`;
 
 export default async function Docs() {
   const [index, pulse] = await Promise.all([getIndex(), getChainPulse().catch(() => null)]);
   const c = index.contracts;
+  const versionId = index.versions[0]?.versionId ?? ZERO_ID;
+  // Our own skill folder at the commit this page was built from (it passes its own check).
+  const selfSkill = /^[0-9a-f]{40}$/.test(COMMIT_SHA) ? `${REPO_URL}/tree/${COMMIT_SHA}/skills/countersign` : "https://github.com/<owner>/<repo>/tree/<commit>/<skill-folder>";
+  const endpoints: ApiEndpoint[] = [
+    { method: "GET", path: "/api/v1/chain", desc: "live block, registry, deploy status" },
+    { method: "GET", path: "/api/v1/stats", desc: "totals" },
+    { method: "GET", path: "/api/v1/versions", desc: "every version with its counts" },
+    { method: "GET", path: "/api/v1/version/<id>", desc: "one verified report", param: versionId },
+    { method: "GET", path: "/api/v1/badge/<id>.svg", desc: "README badge", param: versionId },
+    { method: "POST", path: "/api/v1/check", desc: "Red-Line Check of a GitHub folder", body: JSON.stringify({ uri: selfSkill }, null, 2) },
+  ];
   return (
     <>
       <section className="page-head">
@@ -83,17 +90,7 @@ export default async function Docs() {
         <section id="api" className="doc-sec">
           <h2>API</h2>
           <p>Counts only. No wallets, no handles. CORS open. It&apos;s a cache: the CLI recomputes the same numbers.</p>
-          {API.map(([m, path, d]) => (
-            <div key={path} className="api-row">
-              <span className={`m ${m === "POST" ? "post" : ""}`}>{m}</span>
-              <code>{path}</code>
-              <span className="dim small">{d}</span>
-            </div>
-          ))}
-          <div className="two-col" style={{ marginTop: 20 }}>
-            <CodeBlock label="try it" code={`curl ${SITE_URL}/api/v1/chain\ncurl ${SITE_URL}/api/v1/stats\n\n![countersign](${SITE_URL}/api/v1/badge/<id>.svg)`} />
-            <CodeBlock label="GET /api/v1/chain" copy={false} code={pulse ? JSON.stringify(pulse, null, 2) : "chain unreachable at build"} />
-          </div>
+          <ApiConsole endpoints={endpoints} site={SITE_URL} initial={pulse ? JSON.stringify(pulse) : null} />
         </section>
 
         <section id="install" className="doc-sec">
