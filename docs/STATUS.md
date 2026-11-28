@@ -49,6 +49,17 @@
     - Link previews for `/`, `/try` and `/r/<n>` use the site's own fonts (`web/assets/og`, OFL; Plex Mono unmodified). The 11 score cards render at build time.
     - A Share link appears under the certificate after the first move; its text always starts with "Demo:".
     - New: a themed 404 page and a closing "Your move." band. `main` clips horizontal overflow.
+  - **Nov 28, "Watch it" + live API console** (user: "go on!" to the two open ideas).
+    - **"Watch it"** (`/watch` redirects to `/?watch=1`): the landing plays itself in about 20 s. It runs 1,000 bots, a hand-forged signature, real use, the same Agent ID again, the six ledger attacks, the receipt, the blocked skill, then "Your move."
+      - Any scroll, tap, key or tab switch hands control back.
+      - Keys: B, S, R, W and Esc (keycap hints are desktop-only CSS).
+      - `lib/tour.ts`. Hero actions read state from a ref, so scripted sequences never act on stale state.
+      - Landing is 244 words.
+    - **/docs API console:** each endpoint is a row you press. It sends the real request and shows status, time, size, Vercel cache, and tinted JSON, with changed lines flashing.
+      - `GET /chain` runs by itself on view.
+      - `POST /check` is prefilled with our own skill at the build's commit, and passes.
+      - Copy as curl. Helpers in `lib/apiConsole.ts`.
+    - Checked on desktop and 390/375 px: the tour runs 20.5 s with the expected end state, no overflow, reduced motion and strict mode clean; all six endpoints answer as expected.
 - [ ] **M5** Nov 27–Dec 6: genuine onboarding. Unique Agent ID gates: 10 by Dec 1, 20 by Dec 4, 30 by Dec 6.
 - [~] **M6** Dec 4–7.
   - [x] README, threat model, manifest spec and hash spec.
@@ -65,7 +76,7 @@
 export PATH="$HOME/.foundry/bin:$HOME/Library/pnpm:$PATH"
 (cd contracts && forge test)                                                  # 32 tests
 (cd contracts && RUN_FORK_TESTS=true forge test --match-path 'test/fork/*')   # real Agent ID on BSC
-pnpm -r test                                                                  # 131 tests (core 53, redline 23, web 51, companion 4)
+pnpm -r test                                                                  # 140 tests (core 53, redline 23, web 60, companion 4)
 scripts/e2e-local.sh                                                          # full flow on anvil
 ```
 
@@ -112,5 +123,5 @@ Mainnet deploy, as soon as the deployer is funded and the user says go:
 
 Meanwhile (no funding needed):
 - outreach with the live site (`docs/outreach-kit.md` now has the real URLs);
-- rehearse the demo with `/try`;
+- rehearse the demo with `/watch` (the 20 s tour) and `/try`;
 - optionally trim the bundle size.

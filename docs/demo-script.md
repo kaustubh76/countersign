@@ -4,6 +4,8 @@
 
 Record before the Jenner hardfork (2026-12-08 02:30 UTC). Have a backup take.
 
+**Optional 20-second cold open:** https://countersign-proof.vercel.app/watch plays the landing page by itself. It runs 1,000 bots, a hand-forged signature, real use, the same Agent ID again, six more attacks, the receipt, and the blocked skill. Every verdict is the real verifier on a simulated chain, and the page says "demo". For a manual take, press B (bots), S (sign by hand), R (real use), W (the tour) and Esc (stop). Any scroll, tap or key stops the tour.
+
 ## 0:00–0:25 · The problem
 
 - Headlines on screen: a backdoored skill pushed to #1 with bot-inflated downloads; over a thousand malicious skills counted by mid-2026; a malware skill aimed at the Binance Agentic Wallet.
@@ -36,7 +38,7 @@ If time is short, show these three live in the playground instead (https://count
 
 ## 2:35–3:00 · Traction and close
 
-- Real numbers from `/api/v1/stats`: versions registered, verified countersigns, distinct Agent IDs.
+- Real numbers from `/api/v1/stats`: versions registered, verified countersigns, distinct Agent IDs. On camera, open https://countersign-proof.vercel.app/docs#api and press `GET /api/v1/stats`. The console sends the real request and shows the response.
 - Close: **"Download counts can be faked. Proof of use can't."**
 
 ## Before recording (checklist)
