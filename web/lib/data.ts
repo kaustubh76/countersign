@@ -127,7 +127,7 @@ export interface VersionSummary {
 export interface IndexData {
   chainId: number;
   deployed: boolean;
-  contracts: { skillRegistry: Address; countersign: Address; agentId: Address } | null;
+  contracts: { skillRegistry: Address; countersign: Address; agentId: Address; guardedExecutor?: Address } | null;
   computedAt: string;
   computedAtBlock: string | null;
   /** union: distinct Agent IDs that registered, countersigned or reported (the eligibility metric). */
@@ -147,7 +147,7 @@ async function buildIndex(): Promise<IndexData> {
   const base: IndexData = {
     chainId: chainId(),
     deployed: Boolean(d),
-    contracts: d ? { skillRegistry: d.skillRegistry, countersign: d.countersign, agentId: d.agentId } : null,
+    contracts: d ? { skillRegistry: d.skillRegistry, countersign: d.countersign, agentId: d.agentId, ...(d.guardedExecutor ? { guardedExecutor: d.guardedExecutor } : {}) } : null,
     computedAt: new Date().toISOString(),
     computedAtBlock: null,
     uniqueAgents: { registry: 0, countersign: 0, union: 0 },
