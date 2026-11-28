@@ -81,7 +81,7 @@ export async function cmdManifest(args: Args): Promise<Result> {
 
 /**
  * countersign redline <skill-dir> [--contracts a,b] [--offline]: the Red-Line Check, with its report hash.
- * RL4 reads the verified source of the skill's contracts (Sourcify; BscScan with a paid key).
+ * RL4 reads the verified source of the skill's contracts (Sourcify; BscScan too with ETHERSCAN_API_KEY).
  */
 export async function cmdRedline(args: Args): Promise<Result> {
   const checkerCommit = flag(args, "checker-commit") ?? null;

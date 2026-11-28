@@ -67,7 +67,7 @@ The hackathon's red lines, turned into a check any team can run before submittin
 | RL1 | QR or pairing-code login | requests for a pairing code; a QR login on a website |
 | RL2 | Skills must not bypass confirmation | wording that skips, hides or automates the user's confirmation |
 | RL3 | No unauthorized transfers or unlimited approvals | maximum-integer allowances; undeclared addresses handed to fund-moving calls; timed transfers to fixed addresses |
-| RL4 | Owner permissions disclosed | the mint, fee, pause, blacklist, withdraw and upgrade powers in the contracts' **verified source** (Sourcify, keyless; BscScan with a paid key), resolved through proxies, and whether the skill's text discloses each one |
+| RL4 | Owner permissions disclosed | the mint, fee, pause, blacklist, withdraw and upgrade powers in the contracts' **verified source** (Sourcify, keyless; BscScan too when an Etherscan API key is set), resolved through proxies, and whether the skill's text discloses each one |
 | RL5 | No brand impersonation | lookalike brand domains; brand words in the skill's name |
 | RL6 | No credential collection | requests for recovery words, keys or API secrets; code that reads the wallet's session store |
 | RL7 | No promised returns | wording that promises profit |

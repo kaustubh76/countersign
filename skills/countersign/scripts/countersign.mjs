@@ -23721,7 +23721,7 @@ function parseEtherscanSource(sourceCode, contractName) {
 }
 async function fromEtherscan(address, opts) {
   const key = opts.etherscanKey;
-  if (!key) return { kind: "missing", detail: "BscScan not consulted (needs a paid Etherscan API key)" };
+  if (!key) return { kind: "missing", detail: "BscScan not consulted (set ETHERSCAN_API_KEY)" };
   try {
     const url = `${ETHERSCAN_V2}?chainid=${opts.chainId}&module=contract&action=getsourcecode&address=${address}&apikey=${encodeURIComponent(key)}`;
     const res = await get(url, opts);

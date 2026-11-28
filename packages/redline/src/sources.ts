@@ -3,7 +3,8 @@
  * chain reads injected, so it runs in the CLI and on the server alike.
  *
  * Precedence is fixed so a re-run reads the same files: a local file (anvil only), then Sourcify, then
- * Etherscan V2 only with a paid key (since late 2025 Etherscan's free tier does not cover BNB Chain).
+ * Etherscan V2 only with a key (ETHERSCAN_API_KEY). Etherscan's free tier no longer covers BNB Chain for most
+ * endpoints, so an error from it just means "unavailable", never an answer about the contract.
  * A Sourcify miss is not proof of "unverified": BscScan may still have it. So without an Etherscan
  * answer the status is "unavailable" (RL4 not checked), never a failure.
  */
@@ -50,7 +51,7 @@ export interface FetchSourcesOptions {
   getStorageAt?: (address: Address, slot: Hex) => Promise<Hex | undefined>;
   /** owner() via eth_call; null when the contract has none. */
   readOwner?: (address: Address) => Promise<Address | null>;
-  /** A paid Etherscan API key; without one BscScan is not consulted. */
+  /** An Etherscan API key; without one BscScan is not consulted. */
   etherscanKey?: string;
   /** Sources for local chains (31337 only): address (any case) → files. */
   localSources?: Record<string, LocalSource>;
@@ -138,7 +139,7 @@ export function parseEtherscanSource(sourceCode: string, contractName: string): 
 
 async function fromEtherscan(address: Address, opts: FetchSourcesOptions): Promise<Lookup> {
   const key = opts.etherscanKey;
-  if (!key) return { kind: "missing", detail: "BscScan not consulted (needs a paid Etherscan API key)" };
+  if (!key) return { kind: "missing", detail: "BscScan not consulted (set ETHERSCAN_API_KEY)" };
   try {
     const url = `${ETHERSCAN_V2}?chainid=${opts.chainId}&module=contract&action=getsourcecode&address=${address}&apikey=${encodeURIComponent(key)}`;
     const res = await get(url, opts);

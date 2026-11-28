@@ -91,7 +91,7 @@ Because the registrant is part of the id, a squatter who registers your files ge
 Red line 4 asks that a project's contracts be open source and their owner permissions disclosed. RL4 reads your anchor and pull targets' **verified source**, through proxies, and lists every power only an admin can use: minting, changing fees or taxes, pausing, freezing or blacklisting, withdrawing or sweeping funds, upgrading, arbitrary calls.
 
 - **Disclose each one in SKILL.md**: for example, "The owner can pause transfers" or the function's exact signature.
-- **Verify on Sourcify** (free, no key): it is what lets anyone re-run RL4. BscScan is read too when the checker has a paid Etherscan key.
+- **Verify on Sourcify** (free, no key): it is what lets anyone re-run RL4. BscScan is read too when the checker has an Etherscan API key.
 - **For a proxy, declare `impl`.** RL4 fails a proxy target without it, because an upgrade would otherwise go unnoticed.
 - Third-party contracts (routers, shared tokens) are listed with their powers, never failed.
 
