@@ -12,6 +12,13 @@ export const MANIFEST_SCHEMA = "countersign.manifest/v1";
 export const MANIFEST_FILE = "countersign.json";
 export const RULESET_VERSION = "countersign.ruleset/v1";
 
+/**
+ * Red-Line rules whose failure means a skill tries to harm its user: the companion refuses to install it
+ * and the verifier records a static incident (I3). The other rules (RL4, RL5, RL7, RL8) are hackathon red
+ * lines an author must fix, but the companion only warns users about them.
+ */
+export const HARMFUL_REDLINE_RULES: readonly string[] = ["RL1", "RL2", "RL3", "RL6"];
+
 export const FLAG_ANCHOR = 1;
 export const FLAG_PULL = 2;
 export const FLOW_APPROVE = 0;

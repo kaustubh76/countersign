@@ -8,6 +8,7 @@ import {
   encodeCountersign,
   encodeReport,
   evaluateRecord,
+  HARMFUL_REDLINE_RULES,
   KIND_COUNTERSIGN,
   KIND_REPORT,
   LIMITS,
@@ -30,7 +31,7 @@ const LINKAGE_NOTICE =
   "This transaction is public: it permanently links this wallet (and its Agent ID) to this skill version on BNB Smart Chain. COUNTERSIGN's site and API show counts only, never who, but anyone can read the chain.";
 
 /** Rules whose failure means the skill tries to harm the user (block). The rest only warn. */
-const HARMFUL_RULES = new Set(["RL1", "RL2", "RL3", "RL6"]);
+const HARMFUL_RULES = new Set(HARMFUL_REDLINE_RULES);
 
 const TOKEN_ABI = [
   { type: "function", name: "approve", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
@@ -71,8 +72,7 @@ export async function cmdCheckInstall(args: Args): Promise<Result> {
   // 1. static red lines on the files the agent is about to run
   for (const r of skill.redline.results) {
     for (const f of r.findings) {
-      const undeclaredWithoutManifest = !m && f.rule === "RL3" && /not declared/.test(f.message);
-      const level = f.severity === "warn" || undeclaredWithoutManifest ? "warn" : HARMFUL_RULES.has(r.rule) ? "block" : "warn";
+      const level = f.severity === "warn" ? "warn" : HARMFUL_RULES.has(r.rule) ? "block" : "warn";
       reasons.push({ level, text: `${r.rule}: ${f.message} (${f.file}:${f.line}: "${f.snippet.slice(0, 80)}")` });
     }
   }

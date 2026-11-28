@@ -21564,6 +21564,7 @@ var CONTENT_HASH_DOMAIN = "countersign.skill.v1";
 var MANIFEST_SCHEMA = "countersign.manifest/v1";
 var MANIFEST_FILE = "countersign.json";
 var RULESET_VERSION = "countersign.ruleset/v1";
+var HARMFUL_REDLINE_RULES = ["RL1", "RL2", "RL3", "RL6"];
 var FLAG_ANCHOR = 1;
 var FLAG_PULL = 2;
 var FLOW_APPROVE = 0;
@@ -22293,7 +22294,7 @@ async function verifyVersionData(input, src) {
   }
   if (input.content && input.staticCheck) {
     const { failedRules } = input.staticCheck(input.content);
-    const harmful = failedRules.filter((r) => ["RL1", "RL2", "RL3", "RL6"].includes(r));
+    const harmful = failedRules.filter((r) => HARMFUL_REDLINE_RULES.includes(r));
     if (harmful.length) incidents.push({ kind: "static", detail: `published content fails ${harmful.join(", ")}`, rules: harmful });
   }
   const reporterAgents = new Set(input.reports.map((r) => r.agentId.toString()));
@@ -22588,6 +22589,7 @@ var TEXT_PATTERNS = [
     rule: "RL3",
     severity: "warn",
     negatable: true,
+    fixedRecipientFails: true,
     re: rx(`${word2(alt("setInterval", "cron", "schedule(?:d|r)?", String.raw`every\s+\d+\s*(?:seconds?|minutes?|hours?|days?)`))}[^\\n]{0,80}${word2(alt("transfer", "send", "withdraw", "sweep", "collect"))}`),
     message: "time-based movement of funds"
   },
@@ -22668,11 +22670,18 @@ var WELL_KNOWN = {
 };
 var TEXT_EXTENSIONS = /\.(md|markdown|txt|mjs|cjs|js|ts|tsx|jsx|json|ya?ml|toml|sh|bash|zsh|py|sol|html?|css|env|ini|cfg|conf)$/i;
 var ADDRESS_RE = /\b0x[0-9a-fA-F]{40}\b/g;
+var CODE_FILE_RE = /\.(mjs|cjs|js|ts|tsx|jsx|py|sh|bash|zsh|sol)$/i;
+var FUND_CALL_RE = /\b(?:transfer|transferFrom|safeTransfer|safeTransferFrom|approve|increaseAllowance|permit|setApprovalForAll|sendTransaction|sendValue)\s*\(|\.call\s*\{\s*value\b/;
 var URL_HOST_RE = /\bhttps?:\/\/([a-z0-9.-]+\.[a-z]{2,})(?::\d+)?/gi;
 function lineOf(text, index2) {
   let line = 1;
   for (let i = 0; i < index2 && i < text.length; i++) if (text.charCodeAt(i) === 10) line++;
   return line;
+}
+function lineAround(text, index2) {
+  const start = text.lastIndexOf("\n", index2) + 1;
+  const end = text.indexOf("\n", index2);
+  return text.slice(start, end === -1 ? text.length : end);
 }
 function snippetAt(text, index2, length) {
   const start = text.lastIndexOf("\n", index2) + 1;
@@ -22724,7 +22733,8 @@ function checkSkill(files, opts = {}) {
       notes.push(`${MANIFEST_FILE} is invalid: ${e.message}`);
     }
   }
-  const declared = declaredAddresses(manifest, opts.extraKnown ?? []);
+  const declared = declaredAddresses(manifest, [...opts.extraKnown ?? [], ...opts.projectContracts ?? []]);
+  const namesUndeclared = (line) => [...line.matchAll(ADDRESS_RE)].some((a) => !declared.has(a[0].toLowerCase()));
   let tradesAnywhere = false;
   let warnsAnywhere = false;
   for (const f of files) {
@@ -22740,13 +22750,14 @@ function checkSkill(files, opts = {}) {
         for (const m of text.matchAll(p.re)) {
           const index2 = m.index ?? 0;
           if (p.negatable && isNegated(text, index2)) continue;
+          const fixed = p.fixedRecipientFails === true && namesUndeclared(lineAround(text, index2));
           findings.push({
             rule: p.rule,
-            severity: p.severity,
+            severity: fixed ? "fail" : p.severity,
             file: f.path,
             line: lineOf(text, index2),
             snippet: snippetAt(text, index2, m[0].length),
-            message: p.message
+            message: fixed ? `${p.message} to a fixed address that is not declared` : p.message
           });
         }
       }
@@ -22757,13 +22768,24 @@ function checkSkill(files, opts = {}) {
       const addr = m[0].toLowerCase();
       if (declared.has(addr)) continue;
       const index2 = m.index ?? 0;
+      const a = getAddress(m[0]);
+      let severity = "fail";
+      let message = `address ${a} is not declared in ${MANIFEST_FILE} (undeclared recipient or spender)`;
+      if (!manifest) {
+        if (CODE_FILE_RE.test(f.path) && FUND_CALL_RE.test(lineAround(text, index2))) {
+          message = `address ${a} is hard-coded into a call that can move funds, and is not declared in any ${MANIFEST_FILE}`;
+        } else {
+          severity = "warn";
+          message = `address ${a} is not declared: add ${MANIFEST_FILE} (or list it as your contract) so calls to it can be checked`;
+        }
+      }
       findings.push({
         rule: "RL3",
-        severity: "fail",
+        severity,
         file: f.path,
         line: lineOf(text, index2),
         snippet: snippetAt(text, index2, m[0].length),
-        message: `address ${getAddress(m[0])} is not declared in ${MANIFEST_FILE} (undeclared recipient or spender)`
+        message
       });
     }
     for (const m of text.matchAll(URL_HOST_RE)) {
@@ -23190,7 +23212,7 @@ async function versionStatus(ctx, versionId, opts = {}) {
 
 // src/user.ts
 var LINKAGE_NOTICE = "This transaction is public: it permanently links this wallet (and its Agent ID) to this skill version on BNB Smart Chain. COUNTERSIGN's site and API show counts only, never who, but anyone can read the chain.";
-var HARMFUL_RULES = /* @__PURE__ */ new Set(["RL1", "RL2", "RL3", "RL6"]);
+var HARMFUL_RULES = new Set(HARMFUL_REDLINE_RULES);
 var TOKEN_ABI = [
   { type: "function", name: "approve", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "amount" }], outputs: [], stateMutability: "nonpayable" },
   { type: "function", name: "increaseAllowance", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "added" }], outputs: [], stateMutability: "nonpayable" },
@@ -23221,8 +23243,7 @@ async function cmdCheckInstall(args) {
   const m = skill.manifest;
   for (const r of skill.redline.results) {
     for (const f of r.findings) {
-      const undeclaredWithoutManifest = !m && f.rule === "RL3" && /not declared/.test(f.message);
-      const level = f.severity === "warn" || undeclaredWithoutManifest ? "warn" : HARMFUL_RULES.has(r.rule) ? "block" : "warn";
+      const level = f.severity === "warn" ? "warn" : HARMFUL_RULES.has(r.rule) ? "block" : "warn";
       reasons.push({ level, text: `${r.rule}: ${f.message} (${f.file}:${f.line}: "${f.snippet.slice(0, 80)}")` });
     }
   }

@@ -18,6 +18,7 @@ import {
   TRADING_RE,
   type Finding,
   type RuleId,
+  type Severity,
 } from "./rules.js";
 
 export const RULESET = "countersign.redline/v1";
@@ -43,6 +44,10 @@ export const WELL_KNOWN: Record<string, string> = {
 
 const TEXT_EXTENSIONS = /\.(md|markdown|txt|mjs|cjs|js|ts|tsx|jsx|json|ya?ml|toml|sh|bash|zsh|py|sol|html?|css|env|ini|cfg|conf)$/i;
 const ADDRESS_RE = /\b0x[0-9a-fA-F]{40}\b/g;
+/** Files whose lines are code rather than prose (a hard-coded address in a call there is an instruction). */
+const CODE_FILE_RE = /\.(mjs|cjs|js|ts|tsx|jsx|py|sh|bash|zsh|sol)$/i;
+/** A call on the same line that can move or authorise moving funds. */
+const FUND_CALL_RE = /\b(?:transfer|transferFrom|safeTransfer|safeTransferFrom|approve|increaseAllowance|permit|setApprovalForAll|sendTransaction|sendValue)\s*\(|\.call\s*\{\s*value\b/;
 const URL_HOST_RE = /\bhttps?:\/\/([a-z0-9.-]+\.[a-z]{2,})(?::\d+)?/gi;
 
 export interface RuleResult {
@@ -69,12 +74,20 @@ export interface CheckOptions {
   checkerCommit?: string | null;
   /** Extra addresses to treat as declared (e.g. COUNTERSIGN's own contracts). */
   extraKnown?: readonly string[];
+  /** The author's own contracts, given alongside the skill ("skill repo + contracts"). They count as declared. */
+  projectContracts?: readonly string[];
 }
 
 function lineOf(text: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index && i < text.length; i++) if (text.charCodeAt(i) === 10) line++;
   return line;
+}
+
+function lineAround(text: string, index: number): string {
+  const start = text.lastIndexOf("\n", index) + 1;
+  const end = text.indexOf("\n", index);
+  return text.slice(start, end === -1 ? text.length : end);
 }
 
 function snippetAt(text: string, index: number, length: number): string {
@@ -133,7 +146,8 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
       notes.push(`${MANIFEST_FILE} is invalid: ${(e as Error).message}`);
     }
   }
-  const declared = declaredAddresses(manifest, opts.extraKnown ?? []);
+  const declared = declaredAddresses(manifest, [...(opts.extraKnown ?? []), ...(opts.projectContracts ?? [])]);
+  const namesUndeclared = (line: string) => [...line.matchAll(ADDRESS_RE)].some((a) => !declared.has(a[0].toLowerCase()));
 
   let tradesAnywhere = false;
   let warnsAnywhere = false;
@@ -152,13 +166,14 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
         for (const m of text.matchAll(p.re)) {
           const index = m.index ?? 0;
           if (p.negatable && isNegated(text, index)) continue;
+          const fixed = p.fixedRecipientFails === true && namesUndeclared(lineAround(text, index));
           findings.push({
             rule: p.rule,
-            severity: p.severity,
+            severity: fixed ? "fail" : p.severity,
             file: f.path,
             line: lineOf(text, index),
             snippet: snippetAt(text, index, m[0].length),
-            message: p.message,
+            message: fixed ? `${p.message} to a fixed address that is not declared` : p.message,
           });
         }
       }
@@ -166,18 +181,31 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
       if (RISK_WARNING_RE.test(text)) warnsAnywhere = true;
     }
 
-    // RL3: addresses that the manifest does not declare (an attacker's recipient hides here)
+    // RL3: addresses that nothing declares (an attacker's recipient hides here). With a manifest, every
+    // undeclared address fails. Without one, only an address handed to a fund-moving call in code fails;
+    // elsewhere it is advisory, so an honest skill that names its own contract is not marked as failing.
     for (const m of text.matchAll(ADDRESS_RE)) {
       const addr = m[0].toLowerCase();
       if (declared.has(addr)) continue;
       const index = m.index ?? 0;
+      const a = getAddress(m[0] as Address);
+      let severity: Severity = "fail";
+      let message = `address ${a} is not declared in ${MANIFEST_FILE} (undeclared recipient or spender)`;
+      if (!manifest) {
+        if (CODE_FILE_RE.test(f.path) && FUND_CALL_RE.test(lineAround(text, index))) {
+          message = `address ${a} is hard-coded into a call that can move funds, and is not declared in any ${MANIFEST_FILE}`;
+        } else {
+          severity = "warn";
+          message = `address ${a} is not declared: add ${MANIFEST_FILE} (or list it as your contract) so calls to it can be checked`;
+        }
+      }
       findings.push({
         rule: "RL3",
-        severity: "fail",
+        severity,
         file: f.path,
         line: lineOf(text, index),
         snippet: snippetAt(text, index, m[0].length),
-        message: `address ${getAddress(m[0] as Address)} is not declared in ${MANIFEST_FILE} (undeclared recipient or spender)`,
+        message,
       });
     }
 

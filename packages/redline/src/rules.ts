@@ -52,6 +52,8 @@ export interface TextPattern {
   message: string;
   /** Skip the match when a negation ("never", "do not", …) precedes it in the same sentence. */
   negatable: boolean;
+  /** A warning that becomes a failure when the same line names an undeclared (fixed) address. */
+  fixedRecipientFails?: boolean;
   /** Prose patterns run on every text file; code patterns too, but they target code syntax. */
 }
 
@@ -180,6 +182,7 @@ export const TEXT_PATTERNS: TextPattern[] = [
     rule: "RL3",
     severity: "warn",
     negatable: true,
+    fixedRecipientFails: true,
     re: rx(`${word(alt("setInterval", "cron", "schedule(?:d|r)?", String.raw`every\s+\d+\s*(?:seconds?|minutes?|hours?|days?)`))}[^\\n]{0,80}${word(alt("transfer", "send", "withdraw", "sweep", "collect"))}`),
     message: "time-based movement of funds",
   },

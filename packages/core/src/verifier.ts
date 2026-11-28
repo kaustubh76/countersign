@@ -11,7 +11,7 @@ import {
   type Transaction,
   type TransactionReceipt,
 } from "viem";
-import { FLAG_ANCHOR, FLAG_PULL, FLOW_APPROVE, FLOW_TRANSFER, KIND_COUNTERSIGN, MANIFEST_FILE, RULESET_VERSION, SESSION_WINDOW_BLOCKS } from "./constants.js";
+import { FLAG_ANCHOR, FLAG_PULL, FLOW_APPROVE, FLOW_TRANSFER, HARMFUL_REDLINE_RULES, KIND_COUNTERSIGN, MANIFEST_FILE, RULESET_VERSION, SESSION_WINDOW_BLOCKS } from "./constants.js";
 import { parseManifest } from "./manifest.js";
 import { hashSkillFiles, type SkillFile } from "./skillHash.js";
 import type { RecordView, VersionView } from "./views.js";
@@ -289,7 +289,7 @@ export async function verifyVersionData(input: VerifyInput, src: TxSource): Prom
   // ── I3: static findings on the published content ─────────────────────────────────────────────
   if (input.content && input.staticCheck) {
     const { failedRules } = input.staticCheck(input.content);
-    const harmful = failedRules.filter((r) => ["RL1", "RL2", "RL3", "RL6"].includes(r));
+    const harmful = failedRules.filter((r) => HARMFUL_REDLINE_RULES.includes(r));
     if (harmful.length) incidents.push({ kind: "static", detail: `published content fails ${harmful.join(", ")}`, rules: harmful });
   }
 
