@@ -7,15 +7,15 @@
  * it detects never appear literally in this file or in the bundled skill. That way COUNTERSIGN's own skill
  * passes its own check (and any other scanner) without exempting itself.
  *
- * Rule ids follow the hackathon's red-line numbers. RL4 (owner permissions in verified source) is not part
- * of v1, and RL9 does not apply to skill files.
+ * Rule ids follow the hackathon's red-line numbers. RL4 (owner permissions in the contracts' verified source,
+ * owner.ts) runs only when the contracts are given; RL9 does not apply to skill files.
  */
 
-export type RuleId = "RL1" | "RL2" | "RL3" | "RL5" | "RL6" | "RL7" | "RL8";
+export type RuleId = "RL1" | "RL2" | "RL3" | "RL4" | "RL5" | "RL6" | "RL7" | "RL8";
 export type Severity = "fail" | "warn";
 
 /** Bit positions in the on-chain rulesChecked / rulesPassed masks: bit (n - 1) = RLn. */
-export const RULE_BITS: Record<RuleId | "RL4", number> = {
+export const RULE_BITS: Record<RuleId, number> = {
   RL1: 1 << 0,
   RL2: 1 << 1,
   RL3: 1 << 2,
@@ -30,6 +30,7 @@ export const RULE_TITLES: Record<RuleId, string> = {
   RL1: "Wallet pairing stays inside the Binance App",
   RL2: "The user sees and confirms every asset action",
   RL3: "Approvals are capped and recipients are declared",
+  RL4: "Owner powers are disclosed (verified source)",
   RL5: "No brand impersonation in names or domains",
   RL6: "Wallet secrets stay with the user",
   RL7: "No promised returns",

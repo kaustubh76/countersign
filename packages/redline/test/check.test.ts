@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SkillFile } from "@countersign/core";
 import { allPassed, checkSkill, reportHash, type RedlineReport } from "../src/check.js";
 import { RULE_BITS, type RuleId } from "../src/rules.js";
+import type { AnalyzedContract } from "../src/sources.js";
 
 // Phrases are assembled from word lists so the literal banned phrases never appear in this repository.
 const say = (...words: string[]) => words.join(" ");
@@ -159,9 +160,90 @@ describe("self-scan", () => {
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
     const read = async (rel: string) => f(rel, await readFile(fileURLToPath(new URL(`../src/${rel}`, import.meta.url)), "utf8"));
-    const files = [await read("rules.ts"), await read("check.ts"), f("SKILL.md", "---\nname: self\n---\n")];
+    const files = [await read("rules.ts"), await read("check.ts"), await read("owner.ts"), await read("sources.ts"), f("SKILL.md", "---\nname: self\n---\n")];
     const r = checkSkill(files);
     const all = r.results.flatMap((x) => x.findings).filter((x) => !/not declared/.test(x.message));
     expect(all).toEqual([]);
+  });
+});
+
+describe("RL4: owner powers in the project's verified contracts", () => {
+  const verified = (address: string, over: Partial<AnalyzedContract> = {}): AnalyzedContract => ({
+    address: address as AnalyzedContract["address"],
+    status: "verified",
+    provider: "sourcify",
+    contractName: "App",
+    sourceHash: "0x01",
+    codehash: "0x02",
+    powers: [{ category: "mint", fn: "mint", signature: "mint(address,uint256)", guard: "onlyOwner" }],
+    others: ["setURI"],
+    ...over,
+  });
+  const TOKEN = "0x2222222222222222222222222222222222222222";
+  const withToken = () =>
+    f("countersign.json", JSON.stringify({ schema: "countersign.manifest/v1", chainId: 56, publisher: PUBLISHER, name: "demo-app",
+      targets: [{ address: APP, anchor: true, functions: ["ping()"] }, { address: TOKEN, functions: ["approve(address,uint256)"] }] }));
+
+  it("is not run, and leaves no trace, when no contracts are given", () => {
+    const r = checkSkill(skill("Calls ping()."));
+    expect(r.results.map((x) => x.rule)).not.toContain("RL4");
+    expect(r.notes.join()).not.toMatch(/RL4/);
+    expect(r.input.contracts).toBeUndefined();
+  });
+
+  it("fails an undisclosed power in the author's own contract, and passes once the skill says so", () => {
+    const bad = checkSkill(skill("Calls ping()."), { contracts: [verified(APP)] });
+    expect(rule(bad, "RL4").passed).toBe(false);
+    expect(rule(bad, "RL4").findings[0]!.message).toMatch(/an admin can mint new tokens \(mint\(address,uint256\), onlyOwner\)/);
+    expect(bad.rulesChecked & RULE_BITS.RL4).toBe(RULE_BITS.RL4);
+    const good = checkSkill(skill("Calls ping(). The owner can mint new tokens."), { contracts: [verified(APP)] });
+    expect(rule(good, "RL4")).toMatchObject({ passed: true, findings: [] });
+    expect(good.rulesPassed & RULE_BITS.RL4).toBe(RULE_BITS.RL4);
+    expect(good.input.contracts).toEqual([expect.objectContaining({ role: "project", powers: [expect.objectContaining({ disclosed: true })], others: ["setURI"] })]);
+  });
+
+  it("lists a third-party contract's powers but never fails the skill for them", () => {
+    const files = [f("SKILL.md", "---\nname: demo-app\n---\nCalls ping()."), withToken()];
+    const r = checkSkill(files, { contracts: [verified(APP, { powers: [] }), verified(TOKEN)] });
+    expect(rule(r, "RL4")).toMatchObject({ passed: true, findings: [] });
+    expect(r.input.contracts?.find((c) => c.address === TOKEN)).toMatchObject({ role: "third-party", powers: [expect.objectContaining({ disclosed: false })] });
+  });
+
+  it("an unverified project contract fails; an unreadable one leaves RL4 unchecked with a note", () => {
+    const unverified = checkSkill(skill("Calls ping()."), { contracts: [{ address: APP as AnalyzedContract["address"], status: "unverified", powers: [], others: [] }] });
+    expect(rule(unverified, "RL4").findings[0]!.message).toMatch(/not verified on BscScan/);
+    const unknown = checkSkill(skill("Calls ping()."), { contracts: [{ address: APP as AnalyzedContract["address"], status: "unavailable", detail: "not on Sourcify", powers: [], others: [] }] });
+    expect(unknown.results.map((x) => x.rule)).not.toContain("RL4");
+    expect(unknown.notes).toEqual(expect.arrayContaining([expect.stringMatching(/RL4 not checked: .*not on Sourcify/)]));
+  });
+
+  it("a definite failure stands even when another project contract could not be read", () => {
+    const files = [f("SKILL.md", "---\nname: demo-app\n---\nCalls ping()."), withToken()];
+    const r = checkSkill(files, { contracts: [verified(APP), { address: TOKEN as AnalyzedContract["address"], status: "unavailable", powers: [], others: [] }], projectContracts: [TOKEN] });
+    expect(rule(r, "RL4").passed).toBe(false);
+  });
+
+  it("an upgradeable proxy must declare its implementation; a renounced (dead) power needs no disclosure", () => {
+    const proxy = verified(APP, { powers: [{ category: "upgrade", fn: "(proxy admin)", guard: "proxy admin" }], proxy: { kind: "eip1967", implementation: TOKEN as AnalyzedContract["address"] } });
+    const r = checkSkill(skill("Calls ping(). The admin can upgrade the proxy."), { contracts: [proxy] });
+    expect(rule(r, "RL4").findings.map((x) => x.message)).toEqual([expect.stringMatching(/upgradeable proxy: declare its implementation/)]);
+    const dead = checkSkill(skill("Calls ping()."), { contracts: [verified(APP, { powers: [{ category: "mint", fn: "mint", guard: "onlyOwner", dead: true }] })] });
+    expect(rule(dead, "RL4").passed).toBe(true);
+  });
+
+  it("without a manifest, contracts passed with the skill are the project's; mentioned ones are only listed", () => {
+    const files = [f("SKILL.md", `---\nname: x\n---\nCall ping() on ${APP}. Tokens come from ${TOKEN}.`)];
+    const r = checkSkill(files, { contracts: [verified(APP), verified(TOKEN)], projectContracts: [APP] });
+    expect(rule(r, "RL4").passed).toBe(false);
+    expect(r.input.contracts?.map((c) => c.role)).toEqual(["project", "mentioned"]);
+    const none = checkSkill(files, { contracts: [verified(TOKEN)] });
+    expect(none.notes).toEqual(expect.arrayContaining([expect.stringMatching(/RL4 not checked: no project contracts/)]));
+  });
+
+  it("the report hash pins the sources read, independent of order", () => {
+    const files = [f("SKILL.md", "---\nname: demo-app\n---\nCalls ping()."), withToken()];
+    const a = reportHash(checkSkill(files, { contracts: [verified(APP), verified(TOKEN)] }));
+    expect(reportHash(checkSkill(files, { contracts: [verified(TOKEN), verified(APP)] }))).toBe(a);
+    expect(reportHash(checkSkill(files, { contracts: [verified(APP, { sourceHash: "0x03" }), verified(TOKEN)] }))).not.toBe(a);
   });
 });

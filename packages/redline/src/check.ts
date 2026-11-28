@@ -1,6 +1,8 @@
-import { getAddress, keccak256, toBytes, zeroAddress, type Address, type Hex } from "viem";
+import { getAddress, isAddressEqual, keccak256, toBytes, zeroAddress, type Address, type Hex } from "viem";
 import {
   AGENT_ID_BSC,
+  FLAG_ANCHOR,
+  FLAG_PULL,
   hashSkillFiles,
   MANIFEST_FILE,
   parseManifest,
@@ -20,12 +22,15 @@ import {
   type RuleId,
   type Severity,
 } from "./rules.js";
+import { isDisclosed, POWER_WORDS } from "./owner.js";
+import type { AnalyzedContract, ProxyInfo, SourceProvider, SourceStatus } from "./sources.js";
 
 export const RULESET = "countersign.redline/v1";
 export const TOOL = "countersign-redline";
-export const TOOL_VERSION = "1.0.0";
+export const TOOL_VERSION = "1.1.0";
 
 const CHECKED: RuleId[] = ["RL1", "RL2", "RL3", "RL5", "RL6", "RL7", "RL8"];
+const PROSE_RE = /\.(md|markdown|txt)$/i;
 /** RL8 is advisory: it can only warn. */
 const ADVISORY: ReadonlySet<RuleId> = new Set(["RL8"]);
 
@@ -57,12 +62,31 @@ export interface RuleResult {
   findings: Finding[];
 }
 
+/** How a contract counts for RL4. Only project contracts can fail it. */
+export type ContractRole = "project" | "third-party" | "mentioned";
+
+/** A contract as recorded in the report: the inputs RL4 read, so anyone can re-run it. */
+export interface ContractSummary {
+  address: Address;
+  role: ContractRole;
+  status: SourceStatus;
+  provider?: SourceProvider;
+  contractName?: string | null;
+  sourceHash?: Hex;
+  codehash?: Hex;
+  owner?: Address | null;
+  proxy?: ProxyInfo;
+  implementation?: { address: Address; status: SourceStatus; provider?: SourceProvider; contractName?: string | null; sourceHash?: Hex; codehash?: Hex };
+  powers: { category: string; fn: string; signature?: string; guard: string; disclosed: boolean; dead?: boolean }[];
+  others: string[];
+}
+
 export interface RedlineReport {
   tool: string;
   toolVersion: string;
   ruleset: string;
   checkerCommit: string | null;
-  input: { contentHash: Hex; manifestHash: Hex | null; fileCount: number };
+  input: { contentHash: Hex; manifestHash: Hex | null; fileCount: number; contracts?: ContractSummary[] };
   rulesChecked: number;
   rulesPassed: number;
   results: RuleResult[];
@@ -76,6 +100,11 @@ export interface CheckOptions {
   extraKnown?: readonly string[];
   /** The author's own contracts, given alongside the skill ("skill repo + contracts"). They count as declared. */
   projectContracts?: readonly string[];
+  /**
+   * The contracts' verified source, analysed (sources.ts). When given, RL4 runs: every owner power in a project
+   * contract must be disclosed in the skill's prose. When absent, RL4 is not run and leaves no trace.
+   */
+  contracts?: readonly AnalyzedContract[];
 }
 
 function lineOf(text: string, index: number): number {
@@ -259,9 +288,20 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
     });
   }
 
+  // RL4: owner powers in the project's verified contracts, disclosed in the skill's own prose
+  const rulesRun = [...CHECKED];
+  let contractSummaries: ContractSummary[] | undefined;
+  if (opts.contracts) {
+    const rl4 = ownerPowers(files, manifest, opts.contracts, opts.projectContracts ?? []);
+    contractSummaries = rl4.summaries;
+    findings.push(...rl4.findings);
+    if (rl4.checked) rulesRun.splice(3, 0, "RL4");
+    else notes.push(...rl4.notes);
+  }
+
   let rulesChecked = 0;
   let rulesPassed = 0;
-  const results: RuleResult[] = CHECKED.map((rule) => {
+  const results: RuleResult[] = rulesRun.map((rule) => {
     const own = findings
       .filter((x) => x.rule === rule)
       .map((x) => (ADVISORY.has(rule) ? { ...x, severity: "warn" as const } : x))
@@ -277,12 +317,111 @@ export function checkSkill(files: readonly SkillFile[], opts: CheckOptions = {})
     toolVersion: TOOL_VERSION,
     ruleset: RULESET,
     checkerCommit: opts.checkerCommit ?? null,
-    input: { contentHash, manifestHash: manifest?.manifestHash ?? null, fileCount: files.length },
+    input: {
+      contentHash,
+      manifestHash: manifest?.manifestHash ?? null,
+      fileCount: files.length,
+      ...(contractSummaries ? { contracts: contractSummaries } : {}),
+    },
     rulesChecked,
     rulesPassed,
     results,
     notes: notes.sort(),
   };
+}
+
+function ownerPowers(
+  files: readonly SkillFile[],
+  manifest: ParsedManifest | null,
+  contracts: readonly AnalyzedContract[],
+  explicit: readonly string[],
+): { findings: Finding[]; notes: string[]; checked: boolean; summaries: ContractSummary[] } {
+  const prose = files
+    .filter((f) => PROSE_RE.test(f.path) || /(^|\/)SKILL\.md$/i.test(f.path))
+    .map((f) => decodeText(f))
+    .filter((t): t is string => t !== null);
+  const target = (a: Address) => manifest?.onchain.targets.find((t) => isAddressEqual(t.target, a));
+  const roleOf = (a: Address): ContractRole | null => {
+    if (WELL_KNOWN[a.toLowerCase()]) return null;
+    if (explicit.some((x) => x.toLowerCase() === a.toLowerCase())) return "project";
+    const t = target(a);
+    if (t) return (t.flags & (FLAG_ANCHOR | FLAG_PULL)) !== 0 ? "project" : "third-party";
+    return "mentioned";
+  };
+  const findings: Finding[] = [];
+  const inconclusive: string[] = [];
+  const summaries: ContractSummary[] = [];
+  let projects = 0;
+  const where = manifest ? MANIFEST_FILE : "SKILL.md";
+  for (const c of [...contracts].sort((x, y) => x.address.toLowerCase().localeCompare(y.address.toLowerCase()))) {
+    const role = roleOf(c.address);
+    if (!role) continue;
+    const label = `${c.contractName ?? "contract"} ${c.address}`;
+    const impl = c.implementation;
+    const powers = [...c.powers, ...(impl?.status === "verified" ? impl.powers : [])];
+    summaries.push({
+      address: c.address,
+      role,
+      status: c.status,
+      ...(c.provider ? { provider: c.provider } : {}),
+      ...(c.contractName !== undefined ? { contractName: c.contractName } : {}),
+      ...(c.sourceHash ? { sourceHash: c.sourceHash } : {}),
+      ...(c.codehash ? { codehash: c.codehash } : {}),
+      ...(c.owner !== undefined ? { owner: c.owner } : {}),
+      ...(c.proxy ? { proxy: c.proxy } : {}),
+      ...(impl
+        ? {
+            implementation: {
+              address: impl.address,
+              status: impl.status,
+              ...(impl.provider ? { provider: impl.provider } : {}),
+              ...(impl.contractName !== undefined ? { contractName: impl.contractName } : {}),
+              ...(impl.sourceHash ? { sourceHash: impl.sourceHash } : {}),
+              ...(impl.codehash ? { codehash: impl.codehash } : {}),
+            },
+          }
+        : {}),
+      powers: powers.map((p) => ({
+        category: p.category,
+        fn: p.fn,
+        ...(p.signature ? { signature: p.signature } : {}),
+        guard: p.guard,
+        disclosed: isDisclosed(p, prose),
+        ...(p.dead ? { dead: true } : {}),
+      })),
+      others: [...c.others, ...(impl?.status === "verified" ? impl.others : [])].sort(),
+    });
+    if (role !== "project") continue; // third-party and mentioned contracts are listed, never a finding
+    projects++;
+    const fail = (message: string, snippet: string) =>
+      findings.push({ rule: "RL4", severity: "fail", file: where, line: 1, snippet, message });
+    if (c.status === "unverified") {
+      fail(`${label}: its source is not verified on BscScan (red line 4 asks for open source)`, c.address);
+      continue;
+    }
+    if (c.status !== "verified") {
+      inconclusive.push(`${c.address}: ${c.detail ?? c.status}`);
+      continue;
+    }
+    if (impl && impl.status !== "verified") inconclusive.push(`${impl.address} (implementation of ${c.address}): ${impl.detail ?? impl.status}`);
+    const t = target(c.address);
+    if (c.proxy && c.proxy.kind !== "clone" && t && t.impl === zeroAddress) {
+      fail(`${label} is an upgradeable proxy: declare its implementation ("impl") in ${MANIFEST_FILE}, so an upgrade is caught`, c.address);
+    }
+    for (const p of powers) {
+      if (p.dead || isDisclosed(p, prose)) continue;
+      fail(`${label}: an admin can ${POWER_WORDS[p.category]} (${p.signature ?? p.fn}, ${p.guard}), and the skill does not say so`, `${p.signature ?? p.fn} · ${p.guard}`);
+    }
+  }
+  // A definite failure stands even if another contract could not be read; a pass needs every one.
+  const failed = findings.length > 0;
+  const checked = projects > 0 && (failed || inconclusive.length === 0);
+  const notes = checked
+    ? []
+    : projects === 0
+      ? ["RL4 not checked: no project contracts (anchor or pull targets in countersign.json, or contracts given with the skill)"]
+      : inconclusive.map((x) => `RL4 not checked: ${x}`);
+  return { findings, notes, checked, summaries };
 }
 
 export function allPassed(report: RedlineReport): boolean {

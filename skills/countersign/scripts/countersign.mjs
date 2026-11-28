@@ -22782,6 +22782,7 @@ var RULE_TITLES = {
   RL1: "Wallet pairing stays inside the Binance App",
   RL2: "The user sees and confirms every asset action",
   RL3: "Approvals are capped and recipients are declared",
+  RL4: "Owner powers are disclosed (verified source)",
   RL5: "No brand impersonation in names or domains",
   RL6: "Wallet secrets stay with the user",
   RL7: "No promised returns",
@@ -22969,11 +22970,63 @@ var BRAND_RE = /binance|\bbnb|bnb(?=[^a-z]|$)/i;
 var TRADING_RE = rx(word2(alt("swap", "trade", "trading", "buy", "sell", seq("limit", "order"), seq("market", "order"), seq("prediction", "market"), "leverage", "perp(?:etual)?s?")), "i");
 var RISK_WARNING_RE = rx(String.raw`\b(?:risk|not\s+financial\s+advice|may\s+lose|could\s+lose|losses?|volatil)`, "i");
 
+// ../redline/src/owner.ts
+var POWER_WORDS = {
+  mint: "mint new tokens",
+  fee: "change fees or taxes",
+  pause: "pause the contract",
+  freeze: "freeze or blacklist accounts",
+  withdraw: "withdraw or sweep the contract's funds",
+  upgrade: "replace the contract's code",
+  call: "make arbitrary calls from the contract"
+};
+var ADMIN_WORDS = "(?:owner|admin|administrator|role|roles|operator|gov|governance|governor|guardian|manager|minter|pauser|keeper|signer|auth|authorized|authorised|controller|dev|team|multisig|treasury|deployer)";
+var ADMIN_MODIFIER_RE = new RegExp(`^(?:_?only_?${ADMIN_WORDS}\\w*|${ADMIN_WORDS}_?only|if_?${ADMIN_WORDS}|requiresauth|auth|isowner|isadmin)$`, "i");
+var ADMIN_NAMES = "(?:owner|admin|administrator|governance|governor|gov|operator|guardian|manager|dev|deployer|controller|signer|treasury|multisig|team|minter|pauser|keeper)";
+var SENDER = String.raw`(?:msg\.sender|_msgSender\(\s*\)|tx\.origin)`;
+var ADMIN_REF = String.raw`(?:${ADMIN_NAMES}\s*\(\s*\)|_?${ADMIN_NAMES}\w*(?!\w)(?!\s*[(\[]))`;
+var ADMIN_CHECK_RE = new RegExp(
+  [
+    String.raw`\b_check(?:Owner|Role|Roles)\s*\(`,
+    String.raw`\b_only${ADMIN_WORDS}\w*\s*\(`,
+    String.raw`\bhas(?:Any)?Roles?\s*\(`,
+    String.raw`\b_?require(?:Owner|Admin|Role)\w*\s*\(`,
+    String.raw`\bisAuthorized\s*\(`,
+    String.raw`${SENDER}\s*[!=]=\s*${ADMIN_REF}`,
+    String.raw`${ADMIN_REF}\s*[!=]=\s*${SENDER}`
+  ].join("|"),
+  "i"
+);
+var DISCLOSURE_WORDS = {
+  mint: /\bmint/i,
+  fee: /\b(?:fees?|tax(?:es)?|commission)\b/i,
+  pause: /\b(?:un)?paus/i,
+  freeze: /\b(?:freez|frozen|blacklist|blocklist|block[- ]list|deny[- ]?list|ban)/i,
+  withdraw: /\b(?:withdraw|sweep|rescue|recover|drain)/i,
+  upgrade: /\b(?:upgrad|proxy|implementation)/i,
+  call: /\b(?:arbitrary|any)\s+calls?\b|\bexecute\b/i
+};
+var OWNER_WORD_RE = /\b(?:owner|admin|administrator|operator|deployer|team|multisig|multi-sig|governance|governor|guardian|role|privileged|controller)s?\b/i;
+function isDisclosed(power, prose) {
+  for (const text of prose) {
+    if (power.signature && text.includes(power.signature)) return true;
+    for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
+      if (!OWNER_WORD_RE.test(sentence)) continue;
+      const byName = power.fn.startsWith("(") ? -1 : sentence.search(new RegExp(`\\b${power.fn.replace(/\$/g, "\\$")}\\b`));
+      const byWord = DISCLOSURE_WORDS[power.category].exec(sentence)?.index ?? -1;
+      const at = byName >= 0 ? byName : byWord;
+      if (at >= 0 && !isNegated(sentence, at)) return true;
+    }
+  }
+  return false;
+}
+
 // ../redline/src/check.ts
 var RULESET = "countersign.redline/v1";
 var TOOL = "countersign-redline";
-var TOOL_VERSION = "1.0.0";
+var TOOL_VERSION = "1.1.0";
 var CHECKED = ["RL1", "RL2", "RL3", "RL5", "RL6", "RL7", "RL8"];
+var PROSE_RE = /\.(md|markdown|txt)$/i;
 var ADVISORY = /* @__PURE__ */ new Set(["RL8"]);
 var WELL_KNOWN = {
   [AGENT_ID_BSC.toLowerCase()]: "Agent ID registry",
@@ -23154,9 +23207,18 @@ function checkSkill(files, opts = {}) {
       message: "trading skill without a risk warning"
     });
   }
+  const rulesRun = [...CHECKED];
+  let contractSummaries;
+  if (opts.contracts) {
+    const rl4 = ownerPowers(files, manifest, opts.contracts, opts.projectContracts ?? []);
+    contractSummaries = rl4.summaries;
+    findings.push(...rl4.findings);
+    if (rl4.checked) rulesRun.splice(3, 0, "RL4");
+    else notes.push(...rl4.notes);
+  }
   let rulesChecked = 0;
   let rulesPassed = 0;
-  const results = CHECKED.map((rule) => {
+  const results = rulesRun.map((rule) => {
     const own = findings.filter((x) => x.rule === rule).map((x) => ADVISORY.has(rule) ? { ...x, severity: "warn" } : x).sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.message.localeCompare(b.message));
     const passed = !own.some((x) => x.severity === "fail");
     rulesChecked |= RULE_BITS[rule];
@@ -23168,12 +23230,94 @@ function checkSkill(files, opts = {}) {
     toolVersion: TOOL_VERSION,
     ruleset: RULESET,
     checkerCommit: opts.checkerCommit ?? null,
-    input: { contentHash, manifestHash: manifest?.manifestHash ?? null, fileCount: files.length },
+    input: {
+      contentHash,
+      manifestHash: manifest?.manifestHash ?? null,
+      fileCount: files.length,
+      ...contractSummaries ? { contracts: contractSummaries } : {}
+    },
     rulesChecked,
     rulesPassed,
     results,
     notes: notes.sort()
   };
+}
+function ownerPowers(files, manifest, contracts, explicit) {
+  const prose = files.filter((f) => PROSE_RE.test(f.path) || /(^|\/)SKILL\.md$/i.test(f.path)).map((f) => decodeText(f)).filter((t) => t !== null);
+  const target = (a) => manifest?.onchain.targets.find((t) => isAddressEqual(t.target, a));
+  const roleOf = (a) => {
+    if (WELL_KNOWN[a.toLowerCase()]) return null;
+    if (explicit.some((x) => x.toLowerCase() === a.toLowerCase())) return "project";
+    const t = target(a);
+    if (t) return (t.flags & (FLAG_ANCHOR | FLAG_PULL)) !== 0 ? "project" : "third-party";
+    return "mentioned";
+  };
+  const findings = [];
+  const inconclusive = [];
+  const summaries = [];
+  let projects = 0;
+  const where = manifest ? MANIFEST_FILE : "SKILL.md";
+  for (const c of [...contracts].sort((x, y) => x.address.toLowerCase().localeCompare(y.address.toLowerCase()))) {
+    const role = roleOf(c.address);
+    if (!role) continue;
+    const label2 = `${c.contractName ?? "contract"} ${c.address}`;
+    const impl = c.implementation;
+    const powers = [...c.powers, ...impl?.status === "verified" ? impl.powers : []];
+    summaries.push({
+      address: c.address,
+      role,
+      status: c.status,
+      ...c.provider ? { provider: c.provider } : {},
+      ...c.contractName !== void 0 ? { contractName: c.contractName } : {},
+      ...c.sourceHash ? { sourceHash: c.sourceHash } : {},
+      ...c.codehash ? { codehash: c.codehash } : {},
+      ...c.owner !== void 0 ? { owner: c.owner } : {},
+      ...c.proxy ? { proxy: c.proxy } : {},
+      ...impl ? {
+        implementation: {
+          address: impl.address,
+          status: impl.status,
+          ...impl.provider ? { provider: impl.provider } : {},
+          ...impl.contractName !== void 0 ? { contractName: impl.contractName } : {},
+          ...impl.sourceHash ? { sourceHash: impl.sourceHash } : {},
+          ...impl.codehash ? { codehash: impl.codehash } : {}
+        }
+      } : {},
+      powers: powers.map((p) => ({
+        category: p.category,
+        fn: p.fn,
+        ...p.signature ? { signature: p.signature } : {},
+        guard: p.guard,
+        disclosed: isDisclosed(p, prose),
+        ...p.dead ? { dead: true } : {}
+      })),
+      others: [...c.others, ...impl?.status === "verified" ? impl.others : []].sort()
+    });
+    if (role !== "project") continue;
+    projects++;
+    const fail = (message, snippet) => findings.push({ rule: "RL4", severity: "fail", file: where, line: 1, snippet, message });
+    if (c.status === "unverified") {
+      fail(`${label2}: its source is not verified on BscScan (red line 4 asks for open source)`, c.address);
+      continue;
+    }
+    if (c.status !== "verified") {
+      inconclusive.push(`${c.address}: ${c.detail ?? c.status}`);
+      continue;
+    }
+    if (impl && impl.status !== "verified") inconclusive.push(`${impl.address} (implementation of ${c.address}): ${impl.detail ?? impl.status}`);
+    const t = target(c.address);
+    if (c.proxy && c.proxy.kind !== "clone" && t && t.impl === zeroAddress) {
+      fail(`${label2} is an upgradeable proxy: declare its implementation ("impl") in ${MANIFEST_FILE}, so an upgrade is caught`, c.address);
+    }
+    for (const p of powers) {
+      if (p.dead || isDisclosed(p, prose)) continue;
+      fail(`${label2}: an admin can ${POWER_WORDS[p.category]} (${p.signature ?? p.fn}, ${p.guard}), and the skill does not say so`, `${p.signature ?? p.fn} · ${p.guard}`);
+    }
+  }
+  const failed = findings.length > 0;
+  const checked = projects > 0 && (failed || inconclusive.length === 0);
+  const notes = checked ? [] : projects === 0 ? ["RL4 not checked: no project contracts (anchor or pull targets in countersign.json, or contracts given with the skill)"] : inconclusive.map((x) => `RL4 not checked: ${x}`);
+  return { findings, notes, checked, summaries };
 }
 function allPassed(report) {
   return report.rulesPassed === report.rulesChecked;
