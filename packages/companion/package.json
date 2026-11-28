@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "build:skill": "node scripts/build-skill.mjs",
-    "attest": "tsx scripts/attest.ts"
+    "attest": "tsx scripts/attest.ts",
+    "scan-skills": "tsx scripts/scan-skills.ts"
   },
   "dependencies": {
     "@countersign/core": "workspace:*",

@@ -10,7 +10,8 @@
     "test": "pnpm -r test",
     "test:contracts": "cd contracts && forge test",
     "build:skill": "pnpm --filter @countersign/companion build:skill",
-    "attest": "pnpm --filter @countersign/companion attest"
+    "attest": "pnpm --filter @countersign/companion attest",
+    "scan-skills": "pnpm --filter @countersign/companion scan-skills"
   },
   "devDependencies": {
     "@types/node": "22.20.7",
