@@ -9,6 +9,7 @@ Form: Binance App login required. The fields come from the official announcement
 **Contract addresses (BNB Smart Chain, verified on BscScan):**
 - SkillRegistry: *(set at deploy)*
 - Countersign: *(set at deploy)*
+- GuardedExecutor: *(set at deploy)*
 
 **Agent ID usage description (≈150 words):**
 

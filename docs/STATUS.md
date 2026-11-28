@@ -8,16 +8,17 @@
 ## Milestones
 
 - [x] **M0** Nov 26: scaffold, env/keys, notes, user kit.
-- [~] **M1** Nov 26–27: contracts.
-  - [x] Built: SkillRegistry 10.4 KB, Countersign 5.0 KB.
-  - [x] Tested: 32 unit/fuzz tests, plus 2 fork tests against the real Agent ID.
-  - [x] `DeployLocal` works, and the mainnet deploy is simulated (≈0.00023 BNB).
+- [~] **M1** Nov 26–28: contracts.
+  - [x] Built: SkillRegistry 12.3 KB (several attesters, `checkCall`), Countersign 5.0 KB, GuardedExecutor 1.7 KB.
+  - [x] Tested: 42 unit/fuzz tests, plus 2 fork tests against the real Agent ID.
+  - [x] `DeployLocal` works, and the mainnet deploy of all three is simulated: ≈0.00028 BNB at 0.05 gwei (5.68 M gas).
   - [ ] Mainnet broadcast, blocked on deployer funding and the user's go-ahead.
   - [ ] BscScan and Sourcify verification.
 - [~] **M2** Nov 27–29: core, author flow, redline.
   - [x] `core`: hash, manifest, versionId, RPC fallback, views.
   - [x] Author CLI.
-  - [x] Redline v1. Our own skill passes it with zero findings.
+  - [x] Redline v1, now with RL4 (owner powers from verified source). Our own skill passes it with zero findings.
+  - [x] The Red-Line attester (`pnpm attest`) and published reports.
   - [ ] Register our skill from kausty.ai and endorse the anchor. Needs the deploy.
 - [x] **M3** verifier + user flow.
   - Ruleset v1 (C1–C5, I1–I3, claims).
@@ -60,6 +61,15 @@
       - `POST /check` is prefilled with our own skill at the build's commit, and passes.
       - Copy as curl. Helpers in `lib/apiConsole.ts`.
     - Checked on desktop and 390/375 px: the tour runs 20.5 s with the expected end state, no overflow, reduced motion and strict mode clean; all six endpoints answer as expected.
+  - **Nov 28, spec-conformance round** (user: apply the ideation doc and the Excalidraw diagram "without fail"; chose all three §16.2 stretch goals). An item-by-item audit found 8 gaps; all are closed:
+    - **RL4** (must-ship §16.1): owner powers (mint, fee, pause, blacklist, withdraw, upgrade, arbitrary call) read from the contracts' verified source and checked against the skill's text, through proxies. Sourcify keyless; Etherscan only with a paid key. Live-tested on the Agent ID registry (adminRegister = owner mint), BSC USDC (EIP-1967 proxy), USDT, CAKE, PancakeRouter.
+    - **"Skill repo + contracts"**: `--contracts` on the CLI, a field on /check, `contracts` in `POST /api/v1/check`.
+    - **RL3** no longer fails honest skills without a manifest (only addresses handed to fund-moving calls in code); timed transfers to fixed addresses now fail.
+    - **The attester flow**: `pnpm attest <versionId>` re-checks the canonical content and unchanged code, runs the full check, never publishes a failure, writes `web/public/attestations/<chain>/<versionId>.json`, then prints the `cast send`. `--verify` re-runs it. /s links the report and shows "matches the chain ✓". /authors has "Get attested" (issue template).
+    - **Pre-flight**: works before the deploy (static only); always says the human signal ("Registered ✓ · Red-line attested ✓ · Guarded ✓ · Countersigned by N (E established) · K verified incidents"); a risk notice on every warn/block; max-amount and operator approvals blocked even without a manifest (§13 demo); `countersign choose` (§6.3).
+    - **Stretch goals**: several attesters (`setAttester(address,bool)`); the GuardedExecutor (opt-in ERC-2771 forwarder; calls outside the manifest revert on-chain); W1 "established" countersigners (Agent ID age isn't used: the registry stores no mint time).
+    - **Web**: versions with incidents rank last; stats add `uniqueAgents.union` and `totals.attested`; the badge adds "red-line ✓"; /docs "How it fits" (the Excalidraw lanes, with its legend colours) and the Red-Line rules.
+    - Checked against a live local chain: the site shows union 4, attested 1, the report matching the chain, a guarded anchor.
 - [ ] **M5** Nov 27–Dec 6: genuine onboarding. Unique Agent ID gates: 10 by Dec 1, 20 by Dec 4, 30 by Dec 6.
 - [~] **M6** Dec 4–7.
   - [x] README, threat model, manifest spec and hash spec.
@@ -76,8 +86,9 @@
 export PATH="$HOME/.foundry/bin:$HOME/Library/pnpm:$PATH"
 (cd contracts && forge test)                                                  # 32 tests
 (cd contracts && RUN_FORK_TESTS=true forge test --match-path 'test/fork/*')   # real Agent ID on BSC
-pnpm -r test                                                                  # 140 tests (core 53, redline 23, web 60, companion 4)
-scripts/e2e-local.sh                                                          # full flow on anvil
+pnpm -r test                                                                  # 183 tests (core 61, redline 54, web 60, companion 8)
+RUN_NET_TESTS=1 pnpm --filter @countersign/redline test                       # RL4 live on BSC contracts (Sourcify)
+scripts/e2e-local.sh                                                          # 16 steps on anvil
 ```
 
 ## Deployed (BSC mainnet, chain 56)
@@ -88,11 +99,14 @@ The deployer is `0xB1B202Bc8D6E93d1aA644C46153c14E086aAE22A`, a fresh key whose 
 |---|---|---|
 | SkillRegistry | `0x4bB4a3465925A0F4383Ddb774a8C92A9d3c8Ca56` (predicted, nonce 0) | — |
 | Countersign | `0xDb1CC0e2F32b6B8C98553Af104e76dD1a184ce58` (predicted, nonce 1) | — |
+| GuardedExecutor | `0x307b3a3A837971E1b8DA673041c1dB5A8AE6bbE5` (predicted, nonce 2) | — |
+
+The Nov 28 dry run (`forge script script/Deploy.s.sol`) produced exactly these three addresses.
 
 - **Attester:** `0x42e7487714AEC6844BC0CE49E7de8F5225fF9C30`.
 - **Owner:** the deployer.
 - The predicted addresses are already in `skills/countersign/countersign.json`.
-- **After deploying,** fill `DEPLOYMENTS[56]` in `packages/core/src/deployments.ts` (with deployBlock), then rebuild the skill bundle.
+- **After deploying,** fill `DEPLOYMENTS[56]` in `packages/core/src/deployments.ts` (with `guardedExecutor` and `deployBlock`), then rebuild the skill bundle.
 
 ## Unique Agent ID addresses interacting
 
@@ -103,25 +117,33 @@ The deployer is `0xB1B202Bc8D6E93d1aA644C46153c14E086aAE22A`, a fresh key whose 
 ## Waiting on the user
 
 - Fund the deployer (≈0.005 BNB) and the attester (≈0.002 BNB). On Nov 27 the user said funding isn't available yet.
-- Add `ETHERSCAN_API_KEY` to `.env`.
+- Verification path: Etherscan's free API no longer covers BNB Chain (Etherscan KB, late 2025), so a free `ETHERSCAN_API_KEY` won't verify on BscScan. Plan: `forge verify-contract --verifier sourcify` (keyless), and BscScan's free web "Verify & Publish" with the standard-JSON input. A paid key is optional.
 - Pair `baw`, enable Developer Mode, and run the 2 preview-only checks (`notes/user-kit.md`).
 - ~~Create the GitHub repo and the Vercel project~~: done Nov 27.
 
 ## Open notes
 
-- The bundle is 774 KB unminified (mostly viem). Consider trimming before freezing v1.0.0.
+- The bundle is 856 KB unminified (mostly viem). Consider trimming before freezing v1.0.0.
 - `DEFAULT_API` is `https://countersign-proof.vercel.app`. The old placeholder, `countersign.vercel.app`, is someone else's site. The URL is baked into the skill bundle and its content hash, so don't change it after mainnet registration.
 - The Vercel MCP returns 403 on `create_project`, so project-level writes go through `vercel api`. `gh` and `vercel` live in `/opt/homebrew/bin`.
+
+## Kill criteria (ideation §15)
+
+1. Is the call visible before signing? Waits on the user's preview-only `baw contract-call preview` check (`notes/user-kit.md`). `check-preview` is built for it.
+2. 10+ public hackathon skills by Nov 28: **yes**. On Nov 28, a GitHub code search found 20+ public repos whose SKILL.md drives `baw contract-call`.
+3. A path to 30 real Agent IDs: the outreach plan (M5).
 
 ## Next action
 
 Mainnet deploy, as soon as the deployer is funded and the user says go:
-1. `forge script script/Deploy.s.sol --rpc-url bsc --broadcast`.
-2. Verify on BscScan, falling back to web standard-JSON; also verify on Sourcify.
-3. Fill `DEPLOYMENTS[56]`, rebuild the bundle and commit. The site switches from "launching" to live numbers on the next push.
+1. `forge script script/Deploy.s.sol --rpc-url bsc --broadcast` (three contracts, ≈0.0003 BNB).
+2. Verify all three on Sourcify (`forge verify-contract --verifier sourcify`, keyless) and on BscScan (web form, standard-JSON input).
+3. Fill `DEPLOYMENTS[56]` (with `guardedExecutor`), rebuild the bundle and commit. The site switches from "launching" to live numbers on the next push. **The bundle is part of our skill's content hash: freeze it before registering.**
 4. Register our skill from kausty.ai via `baw`, using `--uri https://github.com/kaustubh76/countersign/tree/<commit>/skills/countersign`. Then endorse the anchor from the deployer.
+5. Attest it: `pnpm attest <versionId> --from 0x42e7487714AEC6844BC0CE49E7de8F5225fF9C30` (RL4 reads our contracts from Sourcify). Commit and push the report, then send the printed `cast send` from the attester key, after the user's go-ahead.
 
 Meanwhile (no funding needed):
 - outreach with the live site (`docs/outreach-kit.md` now has the real URLs);
-- rehearse the demo with `/watch` (the 20 s tour) and `/try`;
+- rehearse the demo with `/watch` (the 20 s tour) and `/try`; the §13 block beat already works before the deploy;
+- run `scripts/scan-skills.ts` on the public hackathon skills (results stay in `notes/`), for the free Red-Line Check offer;
 - optionally trim the bundle size.

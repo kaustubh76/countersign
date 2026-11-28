@@ -124,7 +124,7 @@ Say what your contracts' owner can do (mint, change fees, pause, blacklist, with
 
 ```sh
 node scripts/countersign.mjs manifest <skill-dir> --json     # validate countersign.json
-node scripts/countersign.mjs redline <skill-dir> --json      # static Red-Line Check
+node scripts/countersign.mjs redline <skill-dir> --contracts <your contracts> --json   # Red-Line Check, RL4 included
 node scripts/countersign.mjs register <skill-dir> --uri https://github.com/<owner>/<repo>/tree/<commit>/<path> --from <publisher-wallet> --json
 ```
 

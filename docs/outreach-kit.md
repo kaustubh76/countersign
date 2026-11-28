@@ -12,7 +12,7 @@
 
 > Hi, we built COUNTERSIGN for the Agent ID hackathon. It gives your skill two things judges care about:
 >
-> 1. **A free Red-Line pre-check**: confirmation bypass, uncapped approvals, undeclared recipients, credential requests, branding and promised-return wording, with file and line for each finding. Paste a commit-pinned GitHub folder, or drop a local folder (it never leaves your browser), at https://countersign-proof.vercel.app/check; results stay private to you.
+> 1. **A free Red-Line pre-check**: confirmation bypass, uncapped approvals, undeclared recipients, credential requests, branding and promised-return wording, with file and line for each finding, plus **your contracts' owner powers read from their verified source** (red line 4: mint, fees, pause, blacklist, withdraw, upgrade, and whether your SKILL.md says so). Paste a commit-pinned GitHub folder and your contract addresses, or drop a local folder (it never leaves your browser), at https://countersign-proof.vercel.app/check; results stay private to you. When it passes, ask for a **free on-chain Red-Line attestation** (GitHub issue template) and show it on your badge.
 > 2. **A proof-of-use badge**: "N Agent ID holders whose own sessions were verified, 0 incidents". It counts only real, in-manifest use of *your* contract, from users' own wallets, so it can't be botted.
 >
 > Setup is about 10 minutes (https://countersign-proof.vercel.app/authors has a countersign.json builder):
@@ -34,6 +34,5 @@
 
 ## Daily tracking
 
-- `https://countersign-proof.vercel.app/api/v1/stats` → `uniqueAgents.registry` and `uniqueAgents.countersign`.
-- The union is what counts for eligibility.
+- `https://countersign-proof.vercel.app/api/v1/stats` → `uniqueAgents.union`: distinct Agent IDs that registered, countersigned or reported. That union is what counts for eligibility.
 - Gates: **10 by Dec 1, 20 by Dec 4, 30 by Dec 6.**

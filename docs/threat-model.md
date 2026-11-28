@@ -37,6 +37,10 @@ It does **not** prove that the countersigner is a unique human, or that the skil
 | Approval caps set to the integer maximum, hidden in a manifest | `SkillRegistry` rejects a cap of `type(uint256).max`. `check-call` blocks max-amount approvals and undeclared spenders before preview. |
 | A skill tells the agent to skip the check | Pre-flight is advisory: a skill is instructions to an LLM. COUNTERSIGN's teeth are at **selection time**, in what other agents and marketplaces read from the badge API, and in the public record afterwards. The companion skill tells the agent to ignore and surface such instructions. |
 | A COUNTERSIGN server lies about counts | The API is a cache. `countersign status <versionId> --verify-local` recomputes everything from chain data. |
+| An attester rubber-stamps a harmful skill | An attestation is a cached, re-runnable result, not an authority. Its published report pins the checker commit, the files hash and every contract's source hash, and `pnpm attest <versionId> --verify` re-runs it. Only an active attestation that checked every harmful rule counts as a pass. A failed rule recorded by any active attester puts the version on warning. The owner can disable an attester, and its attestations then stop counting. |
+| A skill takes a call outside its manifest | Pre-flight blocks it before the preview. For contracts that opted into the GuardedExecutor, the chain also refuses it: `execute` reverts unless the version's manifest declares the target and function, the call carries no value, and the target's code is unchanged since registration. |
+| A friend network countersigns one author's skill | Each friend still needs a real, in-manifest session with the author's contract. W1 then shows how many countersigners also countersigned *other* authors' skills: a friend network that only ever countersigns one author stays out of that number. |
+| A team hides owner powers (mint, fees, pause, blacklist, withdraw, upgrade) | RL4 reads the contracts' verified source, through proxies, and fails a skill whose text does not disclose each power. An unverified project contract fails red line 4 outright, and so does a proxy whose implementation is not declared. |
 
 ## Blind spots (stated on the badge)
 
@@ -46,6 +50,8 @@ It does **not** prove that the countersigner is a unique human, or that the skil
 - **Built-in wallet actions** (swaps, sends, limit orders): the agent never sees their calldata, so they cannot be checked or cited.
 - **Low balances:** Developer Mode refuses wallets above a balance cap, so "clean" describes low-balance wallets. Malware that waits for a bigger balance would not show.
 - **Desktop malware, credential theft and bad trading advice** are out of scope. Scanners cover them; we do not claim to.
+- **RL4 reads structure, not intent.** It finds admin-only functions by their guards (owner, role and admin checks) and classifies them by name and by what their bodies do. A power behind an unusual guard, or reached through `delegatecall` into unverified code, can be missed. A disclosure is matched by words, so a vague sentence can pass. Third-party contracts' powers are listed, never failed: the skill author does not control them.
+- **The GuardedExecutor guards only what goes through it**, and only for contracts that opted in. It cannot see a proxy's implementation change, because the proxy's code hash stays the same; the verifier still records that as drift (I1).
 
 ## Upstream trust: Agent ID
 
@@ -67,7 +73,15 @@ COUNTERSIGN therefore presents its number as **the cost to fake** (a distinct Ag
 
 | Contract | Owner / admin powers |
 |---|---|
-| `SkillRegistry` | **Owner:** `setAttester`, plus Ownable2Step `transferOwnership` / `acceptOwnership` / `renounceOwnership`. It cannot edit, delete or pause versions, manifests, endorsements or attestations. **Attester:** `attest` and `revokeAttestation`. |
+| `SkillRegistry` | **Owner:** `setAttester(address,bool)` (add or remove a Red-Line attester, at most 16), plus Ownable2Step `transferOwnership` / `acceptOwnership` / `renounceOwnership`. It cannot edit, delete or pause versions, manifests, endorsements or attestations. **Attesters:** `attest`, and `revokeAttestation` of their own. |
 | `Countersign` | None. There is no owner, no admin, no upgrade path and no pause. |
+| `GuardedExecutor` | None. No owner, no storage, no upgrade path; `execute` is not payable and there is no receive or fallback. |
 
-Neither contract holds funds, accepts native value or can touch any user's assets.
+None of the three contracts holds funds, accepts native value or can touch any user's assets. The GuardedExecutor refuses token-movement selectors (transfers, approvals, permits, NFT transfers) and batch-call selectors, so even an allowance granted to it by mistake could never be spent through it. Never approve it: it needs no approvals.
+
+## Red-Line attestations
+
+- **Who:** enabled attesters only; the owner adds or removes them. The first attester is `0x42e7487714AEC6844BC0CE49E7de8F5225fF9C30`, a dedicated key that does nothing else.
+- **What:** `pnpm attest` re-checks that the files are the registered, canonical content and that the declared contracts still run their registered code. It then runs the full Red-Line Check, RL4 included, at a clean, pushed commit. Only a full pass is attested.
+- **Published first:** the report and its inputs go to `/attestations/56/<versionId>.json` before the attestation points at them. A failing check is never published; the author gets the reasons.
+- **Verifiable:** the attestation stores `rulesChecked`, `rulesPassed`, the checker commit and `keccak256` of the canonical report. `pnpm attest <versionId> --verify` re-runs it and compares.
