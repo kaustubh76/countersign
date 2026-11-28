@@ -30,6 +30,10 @@ const config: NextConfig = {
     cfg.resolve.extensionAlias = { ".js": [".ts", ".tsx", ".js"], ".mjs": [".mts", ".mjs"] };
     return cfg;
   },
+  // A short link to the landing page playing itself (the demo video, outreach).
+  async redirects() {
+    return [{ source: "/watch", destination: "/?watch=1", permanent: false }];
+  },
   async headers() {
     return [
       {

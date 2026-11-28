@@ -7,8 +7,10 @@ import { signature } from "@/lib/fonts";
 import { prefersReducedMotion, Rolling, useLater, useVisible } from "@/lib/motion";
 import { pen } from "@/lib/penFont";
 import { SITE_URL } from "@/lib/site";
+import { isEditable, shortcutFor, TOUR, tourSpan, type TourStep } from "@/lib/tour";
+import { LEDGER_TOUR_EVENT } from "./AttackLedger";
 import { BotSwarm } from "./BotSwarm";
-import { InkPad } from "./InkPad";
+import { InkPad, type InkPadHandle } from "./InkPad";
 import { PenMark } from "./PenMark";
 import { Seal } from "./Seal";
 
@@ -19,6 +21,8 @@ const ATTRACT_TICKS = 70;
 const STILL_ZERO_AT = 15;
 /** The real-use timeline (ms): txs, signature, checks, count, seal. */
 const T = { sig: 450, checks: 900, step: 150, count: 1650, swarm: 1300, strike: 1600 };
+/** The tour lets a smooth scroll get going before the ledger starts stamping. */
+const SCROLL_LEAD = 500;
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 const t = (ms: number) => ({ ["--t" as string]: `${ms}ms` }) as CSSProperties;
@@ -101,10 +105,23 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
   const [nudge, setNudge] = useState(false);
   const [pageShown, setPageShown] = useState(true);
   const [tilt, setTilt] = useState(false);
+  /** The tour step on screen, or null when the tour isn't playing. */
+  const [tour, setTour] = useState<number | null>(null);
+  /** Bumped when the tour resets the certificate, so the signature line starts clean too. */
+  const [epoch, setEpoch] = useState(0);
   const paper = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const ink = useRef<InkPadHandle>(null);
   const ticks = useRef(0);
   const floaterId = useRef(0);
+  // The latest state and busy flag, for anything that acts across renders (the tour, keys, attract mode).
+  const sRef = useRef<DuelState>(INITIAL_DUEL);
+  const busyRef = useRef(false);
+  const idleRef = useRef(true);
+  // The tour: a run id (bumped to cancel) and the wake-ups of its pending pauses.
+  const tourRun = useRef(0);
+  const wakers = useRef(new Set<() => void>());
+  const handlers = useRef({ key: (_e: KeyboardEvent) => {}, watch: () => {} });
   const later = useLater();
   const visible = useVisible(paper, 0.5);
   const last = s.events.at(-1);
@@ -136,9 +153,11 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
     const tick = () => {
+      if (!idleRef.current) return;
       ticks.current += 1;
       const n = 1 + Math.floor(Math.random() * 6);
-      setS((p) => botTraffic(p, n));
+      sRef.current = botTraffic(sRef.current, n);
+      setS(sRef.current);
       setAttract((a) => a + n);
       const id = ++floaterId.current;
       setFloaters((f) => [...f.slice(-3), { id, n }]);
@@ -210,23 +229,31 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
   };
 
   const stop = () => {
+    idleRef.current = false;
     setIdle(false);
     setNudge(false);
     setFloaters([]);
   };
 
+  const offScreen = () => {
+    const box = paper.current?.getBoundingClientRect();
+    return Boolean(box && (box.top < 70 || box.bottom > window.innerHeight));
+  };
+  const scrollTo = (el: Element | null | undefined) => el?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+
   async function act(kind: Act): Promise<boolean> {
-    if (busy) return false;
+    if (busyRef.current) return false;
+    busyRef.current = true;
     stop();
     setBusy(true);
     setFailed(false);
     later.clear();
-    const box = paper.current?.getBoundingClientRect();
-    if (kind !== "ink" && box && (box.top < 70 || box.bottom > window.innerHeight))
-      paper.current?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+    if (kind !== "ink" && offScreen()) scrollTo(paper.current);
     try {
-      const next = kind === "bots" ? await sendBots(s) : kind === "real" ? await useForReal(s) : await signWithInk(s);
+      const cur = sRef.current;
+      const next = kind === "bots" ? await sendBots(cur) : kind === "real" ? await useForReal(cur) : await signWithInk(cur);
       const e = next.events.at(-1)!;
+      sRef.current = next;
       setS(next);
       setScene((n) => n + 1);
       const reduced = prefersReducedMotion();
@@ -237,9 +264,140 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
       setFailed(true);
       return false;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
+
+  // ── "Watch it": the whole landing plays itself; any scroll, tap or key hands it back ─────────
+  /** A pause the tour can cut short: ending the tour wakes every pending pause, so nothing hangs. */
+  const pause = (ms: number) =>
+    new Promise<void>((done) => {
+      const wake = () => {
+        clearTimeout(timer);
+        wakers.current.delete(wake);
+        done();
+      };
+      const timer = setTimeout(wake, ms);
+      wakers.current.add(wake);
+    });
+
+  const endTour = () => {
+    tourRun.current += 1;
+    wakers.current.forEach((wake) => wake());
+    setTour(null);
+  };
+
+  async function play(step: TourStep) {
+    switch (step.id) {
+      case "bots":
+        return void (await act("bots"));
+      case "ink":
+        return ink.current?.scribble();
+      case "real":
+      case "again":
+        return void (await act("real"));
+      case "ledger":
+        scrollTo(document.getElementById("attacks"));
+        await pause(prefersReducedMotion() ? 0 : SCROLL_LEAD);
+        return void window.dispatchEvent(new Event(LEDGER_TOUR_EVENT));
+      case "receipt":
+        return scrollTo(document.querySelector(".receipt"));
+      case "blocked":
+        return scrollTo(document.querySelector(".redacted"));
+      case "close":
+        return scrollTo(document.getElementById("your-move"));
+    }
+  }
+
+  async function watch() {
+    endTour();
+    const run = tourRun.current;
+    const live = () => tourRun.current === run;
+    setTour(0);
+    // A clean certificate, so the story always reads the same (the download count carries on).
+    stop();
+    later.clear();
+    ticks.current = ATTRACT_TICKS;
+    while (busyRef.current && live()) await pause(60);
+    if (!live()) return;
+    sRef.current = { ...INITIAL_DUEL, downloads: sRef.current.downloads };
+    setS(sRef.current);
+    setScene((n) => n + 1);
+    setEpoch((n) => n + 1);
+    setCircled(false);
+    setAttract(0);
+    setFailed(false);
+    if (offScreen()) {
+      scrollTo(paper.current);
+      await pause(prefersReducedMotion() ? 0 : 700);
+    }
+    for (let i = 0; i < TOUR.length; i++) {
+      if (!live()) return;
+      setTour(i);
+      await play(TOUR[i]!);
+      if (!live()) return;
+      await pause(TOUR[i]!.ms);
+    }
+    if (live()) setTour(null);
+  }
+
+  useEffect(() => {
+    handlers.current = {
+      watch: () => void watch(),
+      key: (e) => {
+        const k = shortcutFor({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, repeat: e.repeat, editable: isEditable(e.target) });
+        if (!k) return;
+        if (k === "stop") return void (tour !== null && endTour());
+        if (k === "watch") {
+          e.preventDefault();
+          return tour !== null ? endTour() : void watch();
+        }
+        // B, S and R only while the certificate is on screen.
+        if (!visible || busyRef.current) return;
+        e.preventDefault();
+        if (k === "ink") void ink.current?.scribble();
+        else void act(k);
+      },
+    };
+  });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => handlers.current.key(e);
+    window.addEventListener("keydown", onKey);
+    // /?watch (and /watch, which redirects here) starts the tour once the paper has landed.
+    const auto = new URLSearchParams(window.location.search).has("watch") ? setTimeout(() => handlers.current.watch(), 1100) : undefined;
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      clearTimeout(auto);
+      tourRun.current += 1;
+      wakers.current.forEach((wake) => wake());
+    };
+  }, []);
+
+  // While the tour plays, the visitor taking over (scroll, tap, click, a key, leaving the tab) ends it.
+  // Its own controls are exempt, so Stop doesn't end it and then restart it on the same click.
+  const touring = tour !== null;
+  useEffect(() => {
+    if (!touring) return;
+    const own = (t: EventTarget | null) => t instanceof Element && t.closest("[data-tour-ctl]") !== null;
+    const takeover = (e: Event) => {
+      if (own(e.target)) return;
+      if (e instanceof KeyboardEvent && e.key.toLowerCase() === "w") return;
+      endTour();
+    };
+    const hidden = () => {
+      if (document.visibilityState === "hidden") endTour();
+    };
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
+    const types = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    types.forEach((t) => window.addEventListener(t, takeover, opts));
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      types.forEach((t) => window.removeEventListener(t, takeover, opts));
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, [touring]);
 
   const warm = () => void loadSim().catch(() => undefined);
   const botsUsed = s.events.some((e) => e.kind === "bots");
@@ -255,16 +413,28 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
       <div className="hero-lede">{lede}</div>
       <div className="hero-act">
         <div className="hero-actions">
-          <button type="button" className="btn line" disabled={busy} onPointerEnter={warm} onFocus={warm} onClick={() => void act("bots")}>
+          <button type="button" className="btn line" disabled={busy} data-key="B" aria-keyshortcuts="B" onPointerEnter={warm} onFocus={warm} onClick={() => void act("bots")}>
             {botsUsed ? "Send 1,000 more" : "Send 1,000 bots"}
           </button>
-          <button type="button" className="btn seal" disabled={busy} onPointerEnter={warm} onFocus={warm} onClick={() => void act("real")}>
+          <button type="button" className="btn seal" disabled={busy} data-key="R" aria-keyshortcuts="R" onPointerEnter={warm} onFocus={warm} onClick={() => void act("real")}>
             {s.signed ? "Use it again" : "Use it for real"}
           </button>
         </div>
         <div className="hero-links">
+          <button
+            type="button"
+            className={`watch${touring ? " on" : ""}`}
+            data-tour-ctl=""
+            data-key="W"
+            aria-keyshortcuts="W"
+            title={touring ? "Stop (Esc)" : "Plays the page in about 20 seconds"}
+            onPointerEnter={warm}
+            onFocus={warm}
+            onClick={() => (touring ? endTour() : void watch())}
+          >
+            {touring ? "Stop" : "Watch it"}
+          </button>
           <Link href="/try">All 11 attacks →</Link>
-          <Link href="/check">Check a skill →</Link>
         </div>
       </div>
 
@@ -331,7 +501,7 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
                     You
                   </span>
                 ) : (
-                  <InkPad nudge={nudge} disabled={busy} onStart={stop} onSign={() => act("ink")} />
+                  <InkPad key={`ink-${epoch}`} ref={ink} nudge={nudge} disabled={busy} onStart={stop} onSign={() => act("ink")} />
                 )}
               </div>
               <div className="sig-cap">Countersigned by</div>
@@ -371,6 +541,24 @@ export function HeroDuel({ title, lede, versionLabel }: { title: ReactNode; lede
           </a>
         </div>
       </div>
+
+      {tour !== null ? (
+        <div className="paper tour" data-tour-ctl="">
+          <span className="tour-n">
+            {tour + 1}/{TOUR.length}
+          </span>
+          <span className="tour-cap">{TOUR[tour]!.cap}</span>
+          <button type="button" className="tour-stop" aria-label="Stop the tour (Esc)" onClick={endTour}>
+            Stop
+          </button>
+          <span
+            key={`bar-${tour}`}
+            className="tour-bar"
+            aria-hidden="true"
+            style={{ ["--from" as string]: tourSpan(tour).from, ["--to" as string]: tourSpan(tour).to, ["--dur" as string]: `${TOUR[tour]!.ms}ms` } as CSSProperties}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

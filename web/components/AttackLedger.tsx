@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { loadSim } from "@/lib/duel";
+import { useLater } from "@/lib/motion";
 import type { Outcome } from "@/lib/sim/scenarios";
 import { OUTCOME_STAMP, Stamp } from "./Stamp";
 
@@ -18,6 +19,9 @@ interface Result {
   n: number;
 }
 
+/** The landing tour asks the ledger to run every attack from a clean sheet (see HeroDuel). */
+export const LEDGER_TOUR_EVENT = "countersign:ledger";
+
 /**
  * Six attacks you can run right here. Each click runs the scenario through the real verifier and the
  * Countersign.sol mirror (the playground's code); the stamp and the deciding check come back from it.
@@ -30,6 +34,7 @@ export function AttackLedger({ rows, total }: { rows: AttackRow[]; total: number
   const box = useRef<HTMLDivElement>(null);
   const auto = useRef(false);
   const runs = useRef(0);
+  const later = useLater();
 
   async function run(id: string, expand: boolean) {
     setBusy((b) => ({ ...b, [id]: true }));
@@ -56,17 +61,30 @@ export function AttackLedger({ rows, total }: { rows: AttackRow[]; total: number
         if (!entries.some((e) => e.isIntersecting) || auto.current) return;
         auto.current = true;
         io.disconnect();
-        setTimeout(() => void run(rows[0]!.id, true), 450);
+        later.after(450, () => void run(rows[0]!.id, true));
       },
       { rootMargin: "0px 0px -35% 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [rows]);
+  }, [rows, later]);
+
+  // The tour: a clean sheet, then all six in a row (and no separate auto-run of the first one).
+  useEffect(() => {
+    const replay = () => {
+      auto.current = true;
+      later.clear();
+      setResults({});
+      setOpen(null);
+      rows.forEach((r, i) => later.after(i * 350, () => void run(r.id, false)));
+    };
+    window.addEventListener(LEDGER_TOUR_EVENT, replay);
+    return () => window.removeEventListener(LEDGER_TOUR_EVENT, replay);
+  }, [rows, later]);
 
   function runAll() {
     rows.forEach((r, i) => {
-      if (!results[r.id]) setTimeout(() => void run(r.id, false), i * 350);
+      if (!results[r.id]) later.after(i * 350, () => void run(r.id, false));
     });
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import { prefersReducedMotion, useLater } from "@/lib/motion";
 import { PenMark } from "./PenMark";
 
@@ -41,12 +41,30 @@ function scribble(w: number, h: number): Pt[] {
   return pts;
 }
 
+/** Lets the hero sign for you (the tour, and the S key): the same scribble a tap or Enter plays. */
+export interface InkPadHandle {
+  /** Resolves once the contract check has answered (or at once if the line is busy). */
+  scribble: () => Promise<void>;
+}
+
 /**
  * The empty countersign line, and you can actually sign it: with a mouse, a finger, or Enter for a
  * scribble. Whatever you draw is still just ink. `onSign` runs the real contract check and resolves true
  * when it refused, and the ink gets struck through.
  */
-export function InkPad({ onStart, onSign, nudge, disabled }: { onStart: () => void; onSign: () => Promise<boolean>; nudge: boolean; disabled: boolean }) {
+export function InkPad({
+  ref,
+  onStart,
+  onSign,
+  nudge,
+  disabled,
+}: {
+  ref?: Ref<InkPadHandle>;
+  onStart: () => void;
+  onSign: () => Promise<boolean>;
+  nudge: boolean;
+  disabled: boolean;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const pathEl = useRef<SVGPathElement>(null);
   const strokes = useRef<Pt[][]>([]);
@@ -122,6 +140,8 @@ export function InkPad({ onStart, onSign, nudge, disabled }: { onStart: () => vo
     });
     if (alive.current) await submit();
   }
+
+  useImperativeHandle(ref, () => ({ scribble: playScribble }));
 
   const at = (e: { clientX: number; clientY: number }): Pt => {
     const r = box.current!.getBoundingClientRect();
@@ -202,6 +222,8 @@ export function InkPad({ onStart, onSign, nudge, disabled }: { onStart: () => vo
           type="button"
           className="sig-empty"
           aria-label="Sign here by hand (the contract checks it)"
+          aria-keyshortcuts="S"
+          data-key="S"
           disabled={disabled}
           onClick={(e) => {
             if (e.detail === 0) void playScribble();

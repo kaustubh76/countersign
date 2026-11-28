@@ -56,7 +56,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="band">
+      <section className="band" id="attacks">
         <div className="wrap">
           <h2>Try to fake one</h2>
           <AttackLedger rows={rows} total={fakes} />
@@ -145,7 +145,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="band closing">
+      <section className="band closing" id="your-move">
         <div className="wrap closing-row">
           <h2>Your move.</h2>
           <div className="closing-act">

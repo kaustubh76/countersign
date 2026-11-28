@@ -265,6 +265,27 @@ a.ledger-row:hover .k { text-decoration: line-through; text-decoration-color: va
   .hero-grid.tilt .cert-wrap:hover .certificate { transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
   .hero-grid.tilt .cert-wrap:hover .certificate::after { opacity: 1; }
 }
+/* "Watch it": the landing plays itself (a fixed chip shows the step); any scroll, tap or key hands it back */
+.hero-links button.watch { background: none; border: 0; border-bottom: 1px solid var(--rule-2); border-radius: 0; padding: 0 0 2px; font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--seal); }
+.hero-links button.watch::before { content: "▶ "; }
+.hero-links button.watch.on::before { content: "■ "; }
+.hero-links button.watch:hover { border-color: var(--seal); }
+.tour { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); translate: -50% 0; z-index: 60; display: flex; align-items: center; gap: 14px; padding: 8px 8px 9px 14px; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 18px 40px -12px rgba(0, 0, 0, 0.85); }
+.tour-n { color: var(--paper-muted); font-variant-numeric: tabular-nums; }
+.tour-cap { min-width: 22ch; font-weight: 600; }
+.tour-stop { padding: 5px 9px; border: 0; border-radius: 2px; background: var(--paper-ink); color: var(--paper); font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.tour-stop::before { content: "■ "; }
+.tour-stop:hover { background: var(--seal-paper); }
+.tour-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--seal-paper); transform-origin: left center; scale: var(--to, 1) 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .tour { animation: rise 0.3s ease both; }
+  .tour-bar { animation: tourbar var(--dur, 1s) linear both; }
+}
+/* keyboard hints (B, S, R, W): faint keycaps, only where there's a mouse (and so, most likely, a keyboard) */
+@media (hover: hover) and (pointer: fine) {
+  [data-key]::after { content: attr(data-key); display: inline-block; margin-left: 8px; padding: 0 4px; border: 1px solid currentColor; border-radius: 2px; font-size: 0.6rem; line-height: 1.45; letter-spacing: 0; opacity: 0.5; vertical-align: 1px; }
+  .btn[data-key]::after { margin-left: 0; }
+}
 /* closing band: the last thing on the landing is something to do */
 section.band.closing { border-bottom: 0; }
 .closing-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 28px 48px; }
@@ -585,6 +606,7 @@ footer.site p { margin: 4px 0; }
 @keyframes pen { to { stroke-dashoffset: 0; } }
 @keyframes penwipe { from { clip-path: inset(-30% 100% -30% -30%); } to { clip-path: inset(-30% -30% -30% -30%); } }
 @keyframes penwipe-down { from { clip-path: inset(-30% -30% 100% -30%); } to { clip-path: inset(-30% -30% -30% -30%); } }
+@keyframes tourbar { from { scale: var(--from, 0) 1; } }
 @keyframes nudge { 0%, 100% { transform: none; } 20% { transform: translateX(-4px) rotate(-2deg); } 40% { transform: translateX(4px) rotate(2deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
 .rise { animation: rise 0.5s ease both; }
 
