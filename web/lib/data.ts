@@ -8,7 +8,7 @@ import {
   parseDeploymentJson,
   readUniqueAgents,
   rpcUrlsFromEnv,
-  verifyFromSnapshot,
+  verifySnapshot,
   type CanonicalStatus,
   type ChainReader,
   type Deployment,
@@ -113,6 +113,8 @@ export interface VersionSummary {
   status: VersionStatus;
   canonical: CanonicalStatus;
   counted: number;
+  /** W1: counted countersigners who also countersigned another author's skill. */
+  established: number;
   peer: number;
   incidents: number;
   claims: number;
@@ -128,8 +130,9 @@ export interface IndexData {
   contracts: { skillRegistry: Address; countersign: Address; agentId: Address } | null;
   computedAt: string;
   computedAtBlock: string | null;
-  uniqueAgents: { registry: number; countersign: number };
-  totals: { versions: number; counted: number; incidents: number };
+  /** union: distinct Agent IDs that registered, countersigned or reported (the eligibility metric). */
+  uniqueAgents: { registry: number; countersign: number; union: number };
+  totals: { versions: number; counted: number; incidents: number; attested: number };
   versions: VersionSummary[];
   error?: string;
 }
@@ -147,8 +150,8 @@ async function buildIndex(): Promise<IndexData> {
     contracts: d ? { skillRegistry: d.skillRegistry, countersign: d.countersign, agentId: d.agentId } : null,
     computedAt: new Date().toISOString(),
     computedAtBlock: null,
-    uniqueAgents: { registry: 0, countersign: 0 },
-    totals: { versions: 0, counted: 0, incidents: 0 },
+    uniqueAgents: { registry: 0, countersign: 0, union: 0 },
+    totals: { versions: 0, counted: 0, incidents: 0, attested: 0 },
     versions: [],
   };
   if (!d) return base;
@@ -156,9 +159,10 @@ async function buildIndex(): Promise<IndexData> {
     const r = reader();
     const snap = await loadSnapshot(r, d);
     const src = cachedSource();
+    const reports = await verifySnapshot(snap, base.chainId, src, { staticCheck });
     const versions: VersionSummary[] = [];
     for (const [versionId, v] of snap.versions) {
-      const report = await verifyFromSnapshot(snap, base.chainId, versionId, src, { staticCheck });
+      const report = reports.get(versionId);
       if (!report) continue;
       versions.push({
         versionId,
@@ -169,6 +173,7 @@ async function buildIndex(): Promise<IndexData> {
         status: report.status,
         canonical: report.canonical,
         counted: report.countersigns.counted,
+        established: report.countersigns.established ?? 0,
         peer: report.countersigns.peer,
         incidents: report.incidents.length,
         claims: report.claims.total,
@@ -177,16 +182,23 @@ async function buildIndex(): Promise<IndexData> {
         report: { ...report, computedAtBlock: report.computedAtBlock?.toString() ?? null },
       });
     }
-    versions.sort((x, y) => y.counted - x.counted || Number(BigInt(y.registeredBlock) - BigInt(x.registeredBlock)));
+    // Incidents dominate (§7.3): a version with any verified incident never ranks above a clean one.
+    const rank = (v: VersionSummary) => (v.incidents > 0 ? 3 : v.status === "warning" ? 2 : v.status === "unproven" ? 1 : 0);
+    versions.sort((x, y) => rank(x) - rank(y) || y.counted - x.counted || Number(BigInt(y.registeredBlock) - BigInt(x.registeredBlock)));
     const ua = await readUniqueAgents(r, d);
+    // Distinct Agent IDs that registered, countersigned or reported, from the views (no handle lookups).
+    const agents = new Set<string>();
+    for (const v of snap.versions.values()) agents.add(v.registrantAgentId.toString());
+    for (const list of [...snap.countersigns.values(), ...snap.reports.values()]) for (const rec of list) agents.add(rec.agentId.toString());
     return {
       ...base,
       computedAtBlock: snap.block.toString(),
-      uniqueAgents: { registry: Number(ua.registry), countersign: Number(ua.countersign) },
+      uniqueAgents: { registry: Number(ua.registry), countersign: Number(ua.countersign), union: agents.size },
       totals: {
         versions: versions.length,
         counted: versions.reduce((n, v) => n + v.counted, 0),
         incidents: versions.reduce((n, v) => n + v.incidents, 0),
+        attested: versions.filter((v) => v.attestation === "passed").length,
       },
       versions,
     };

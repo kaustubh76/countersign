@@ -100,7 +100,7 @@ export default async function Home() {
                 <div className="ledger-row">
                   <span className="k">Distinct Agent IDs</span>
                   <span className="leader" />
-                  <span className="v big">{index.uniqueAgents.countersign}</span>
+                  <span className="v big">{index.uniqueAgents.union}</span>
                 </div>
                 <div className="ledger-row">
                   <span className="k">Skill versions</span>

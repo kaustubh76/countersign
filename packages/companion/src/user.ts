@@ -465,7 +465,14 @@ async function sessionEnd(args: Args): Promise<Result> {
     readRecords(ctx.reader, ctx.deployment, s.versionId, KIND_REPORT),
   ]);
   const verdict = await evaluateRecord(
-    { chainId: ctx.chainId, version, countersigns, reports, graph: { countersignedAuthors: new Set() } },
+    {
+      chainId: ctx.chainId,
+      version,
+      countersigns,
+      reports,
+      graph: { countersignedAuthors: new Set() },
+      ...(ctx.deployment.guardedExecutor ? { guardedExecutor: ctx.deployment.guardedExecutor } : {}),
+    },
     ctx.reader,
     record,
   );

@@ -22405,6 +22405,20 @@ var TOPIC_APPROVAL = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8
 var TOPIC_APPROVAL_FOR_ALL = "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31";
 var EIP1967_IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 var SEL_TRANSFER = "0xa9059cbb";
+var SEL_EXECUTE = "0xa05aa016";
+var EXECUTE_ABI = [
+  {
+    type: "function",
+    name: "execute",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "versionId", type: "bytes32" },
+      { name: "target", type: "address" },
+      { name: "data", type: "bytes" }
+    ],
+    outputs: [{ name: "result", type: "bytes" }]
+  }
+];
 var SEL_TRANSFER_FROM = "0x23b872dd";
 var EMPTY_SELECTOR = "0x00000000";
 function summarizeAttestations(list2) {
@@ -22426,6 +22440,16 @@ function authorSet(v) {
   const s = /* @__PURE__ */ new Set([lower(v.registrant)]);
   for (const t of v.targets) if (t.endorser !== zeroAddress) s.add(lower(t.endorser));
   return s;
+}
+function effectiveCall(tx, executor) {
+  if (executor && tx.to && isAddressEqual(tx.to, executor) && selectorOf2(tx.input) === SEL_EXECUTE) {
+    try {
+      const { args } = decodeFunctionData({ abi: EXECUTE_ABI, data: tx.input });
+      return { to: getAddress(args[1]), input: args[2], value: tx.value, guardedVersion: args[0] };
+    } catch {
+    }
+  }
+  return { to: tx.to ?? null, input: tx.input, value: tx.value };
 }
 function checkEffects(v, tx, receipt, signer) {
   const reasons = [];
@@ -22467,23 +22491,25 @@ async function checkCitedTx(input, src, codeChanged, record, hash3, opts) {
   const [tx, receipt] = await Promise.all([src.getTransaction(hash3), src.getReceipt(hash3)]);
   if (!tx || !receipt || tx.blockNumber == null) return { ok: false, reasons: ["tx-not-found"], anchorHit: false };
   const reasons = [];
+  const call2 = effectiveCall(tx, input.guardedExecutor);
+  if (call2.guardedVersion !== void 0 && call2.guardedVersion.toLowerCase() !== v.versionId.toLowerCase()) reasons.push("guarded-other-version");
   if (receipt.status !== "success") reasons.push("tx-failed");
   if (tx.chainId !== void 0 && Number(tx.chainId) !== input.chainId) reasons.push("wrong-chain");
   if (!isAddressEqual(tx.from, record.signer)) reasons.push("not-from-signer");
   if (tx.blockNumber <= v.registeredBlock) reasons.push("before-registration");
   if (tx.blockNumber > record.blockNumber) reasons.push("after-record");
   else if (opts.requireInWindow && record.blockNumber - tx.blockNumber > SESSION_WINDOW_BLOCKS) reasons.push("outside-window");
-  const index2 = tx.to ? v.targets.findIndex((t) => isAddressEqual(t.target, tx.to)) : -1;
+  const index2 = call2.to ? v.targets.findIndex((t) => isAddressEqual(t.target, call2.to)) : -1;
   const target = index2 >= 0 ? v.targets[index2] : void 0;
   if (!target) {
     reasons.push("undeclared-target");
     return { ok: false, reasons, anchorHit: false };
   }
-  const selector = selectorOf2(tx.input);
+  const selector = selectorOf2(call2.input);
   if (!v.permissions.some((p) => p.targetIndex === index2 && lower(p.selector) === selector)) reasons.push("undeclared-function");
-  if (tx.value > target.maxValue) reasons.push("value-over-cap");
+  if (call2.value > target.maxValue) reasons.push("value-over-cap");
   if (await codeChanged(target.target)) reasons.push("target-code-changed");
-  reasons.push(...checkEffects(v, tx, receipt, record.signer));
+  reasons.push(...checkEffects(v, call2, receipt, record.signer));
   const anchorHit = (target.flags & FLAG_ANCHOR) !== 0 && target.endorser !== zeroAddress;
   return { ok: reasons.length === 0, reasons, anchorHit };
 }
@@ -22509,7 +22535,7 @@ async function authorPull(input, src, record, hash3) {
   }
   return null;
 }
-async function verifyVersionData(input, src) {
+async function verifyWithAgents(input, src) {
   const v = input.version;
   const codeCache = /* @__PURE__ */ new Map();
   const codeChanged = (target) => {
@@ -22586,11 +22612,14 @@ async function verifyVersionData(input, src) {
   let counted = 0;
   let peer = 0;
   let rejected = 0;
+  const countedAgents = /* @__PURE__ */ new Set();
   const rejectionReasons = {};
   for (const r of input.countersigns) {
     const verdict = await evaluateCountersign(input, src, codeChanged, r, authors, reporterAgents, isPeer);
-    if (verdict.status === "counted") counted++;
-    else if (verdict.status === "peer") peer++;
+    if (verdict.status === "counted") {
+      counted++;
+      countedAgents.add(r.agentId.toString());
+    } else if (verdict.status === "peer") peer++;
     else {
       rejected++;
       for (const reason of new Set(verdict.reasons)) rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
@@ -22602,7 +22631,7 @@ async function verifyVersionData(input, src) {
   const attestation = summarizeAttestations(v.attestations);
   const corroborated = backedAgents.size >= 3;
   const status = incidents.length > 0 ? "incident" : canonical === "mismatch" || corroborated || endorsedAnchors === 0 || attestation.status === "failed" ? "warning" : counted === 0 ? "unproven" : "ok";
-  return {
+  const report = {
     ruleset: RULESET_VERSION,
     versionId: v.versionId,
     computedAtBlock: input.computedAtBlock ?? null,
@@ -22620,11 +22649,29 @@ async function verifyVersionData(input, src) {
       active: a.active
     })),
     attestation,
-    countersigns: { total: input.countersigns.length, counted, peer, rejected, rejectionReasons },
+    countersigns: { total: input.countersigns.length, counted, peer, rejected, established: null, rejectionReasons },
     incidents,
     claims: { total: input.reports.length - authorPullReports, backed, corroborated },
     status
   };
+  return { report, counted: countedAgents };
+}
+async function verifyAllVersions(versions, src) {
+  const results = [];
+  for (const input of versions) results.push({ input, ...await verifyWithAgents(input, src) });
+  const byAuthor = /* @__PURE__ */ new Map();
+  for (const r of results) {
+    const author = r.input.version.registrantAgentId.toString();
+    for (const agent of r.counted) byAuthor.set(agent, [...byAuthor.get(agent) ?? [], author]);
+  }
+  const out = /* @__PURE__ */ new Map();
+  for (const r of results) {
+    const author = r.input.version.registrantAgentId.toString();
+    let established = 0;
+    for (const agent of r.counted) if ((byAuthor.get(agent) ?? []).some((a) => a !== author)) established++;
+    out.set(r.input.version.versionId, { ...r.report, countersigns: { ...r.report.countersigns, established } });
+  }
+  return out;
 }
 async function evaluateCountersign(input, src, codeChanged, r, authors, reporterAgents, isPeer) {
   const reasons = [];
@@ -22685,14 +22732,12 @@ async function loadSnapshot(reader, d) {
     if (registrant === void 0) continue;
     for (const r of records) graph.countersignedAuthors.add(`${r.agentId.toString()}>${registrant.toString()}`);
   }
-  return { versions, countersigns, reports, graph, block };
+  return { versions, countersigns, reports, graph, block, ...d.guardedExecutor ? { guardedExecutor: d.guardedExecutor } : {} };
 }
-async function verifyFromSnapshot(snap, chainId, versionId, src, opts = {}) {
-  const version4 = snap.versions.get(versionId);
-  if (!version4) return null;
+async function inputFor(snap, chainId, version4, opts, withContent) {
   let content;
   let contentError;
-  if (opts.fetchContent !== false) {
+  if (withContent && opts.fetchContent !== false) {
     try {
       content = await (opts.fetchContent ?? ((uri) => fetchGithubSkill(uri)))(version4.contentURI);
     } catch (e) {
@@ -22700,20 +22745,26 @@ async function verifyFromSnapshot(snap, chainId, versionId, src, opts = {}) {
       contentError = e.message;
     }
   }
-  return verifyVersionData(
-    {
-      chainId,
-      version: version4,
-      countersigns: snap.countersigns.get(versionId) ?? [],
-      reports: snap.reports.get(versionId) ?? [],
-      graph: snap.graph,
-      content,
-      contentError,
-      staticCheck: opts.staticCheck,
-      computedAtBlock: snap.block
-    },
-    src
-  );
+  return {
+    chainId,
+    version: version4,
+    countersigns: snap.countersigns.get(version4.versionId) ?? [],
+    reports: snap.reports.get(version4.versionId) ?? [],
+    graph: snap.graph,
+    content,
+    contentError,
+    staticCheck: opts.staticCheck,
+    computedAtBlock: snap.block,
+    ...snap.guardedExecutor ? { guardedExecutor: snap.guardedExecutor } : {}
+  };
+}
+async function verifySnapshot(snap, chainId, src, opts = {}) {
+  const inputs = [];
+  for (const version4 of snap.versions.values()) {
+    const withContent = opts.contentFor === void 0 || opts.contentFor.toLowerCase() === version4.versionId.toLowerCase();
+    inputs.push(await inputFor(snap, chainId, version4, opts, withContent));
+  }
+  return verifyAllVersions(inputs, src);
 }
 
 // ../redline/src/rules.ts
@@ -23470,11 +23521,14 @@ async function versionStatus(ctx, versionId, opts = {}) {
     }
   }
   const snap = await loadSnapshot(ctx.reader, ctx.deployment);
-  const report = await verifyFromSnapshot(snap, ctx.chainId, versionId, ctx.reader, {
+  const key = [...snap.versions.keys()].find((k) => k.toLowerCase() === versionId.toLowerCase());
+  if (!key) return { report: null, source: "local" };
+  const reports = await verifySnapshot(snap, ctx.chainId, ctx.reader, {
     staticCheck,
+    contentFor: key,
     ...opts.noContent ? { fetchContent: false } : {}
   });
-  return { report, source: "local" };
+  return { report: reports.get(key) ?? null, source: "local" };
 }
 
 // src/user.ts
@@ -23834,7 +23888,14 @@ async function sessionEnd(args) {
     readRecords(ctx.reader, ctx.deployment, s.versionId, KIND_REPORT)
   ]);
   const verdict = await evaluateRecord(
-    { chainId: ctx.chainId, version: version4, countersigns, reports, graph: { countersignedAuthors: /* @__PURE__ */ new Set() } },
+    {
+      chainId: ctx.chainId,
+      version: version4,
+      countersigns,
+      reports,
+      graph: { countersignedAuthors: /* @__PURE__ */ new Set() },
+      ...ctx.deployment.guardedExecutor ? { guardedExecutor: ctx.deployment.guardedExecutor } : {}
+    },
     ctx.reader,
     record
   );

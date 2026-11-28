@@ -3,6 +3,8 @@ export interface BadgeInput {
   counted: number;
   incidents: number;
   status: string;
+  /** "passed" adds the red-line mark (§5.4: the badge shows red-line status too). */
+  attestation?: string;
 }
 
 const COLORS = {
@@ -33,7 +35,7 @@ export function badgeSvg(v: BadgeInput | null): string {
     right = `${v.incidents} verified incident${v.incidents === 1 ? "" : "s"}`;
     color = COLORS.incident;
   } else {
-    right = `${v.counted} verified · 0 incidents`;
+    right = `${v.counted} verified · 0 incidents${v.attestation === "passed" ? " · red-line ✓" : ""}`;
     color = v.status === "ok" ? COLORS.ok : v.status === "warning" ? COLORS.warning : COLORS.unproven;
   }
   const lw = textWidth(left) + 12;

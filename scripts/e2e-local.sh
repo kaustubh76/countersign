@@ -110,4 +110,42 @@ cast send --rpc-url "$RPC" --private-key "$ERIN_PK" "$CS" "$RDATA" >/dev/null ||
 STATUS=$($CLI status "$VERSION" $COMMON $LOCAL)
 [ "$(echo "$STATUS" | json 'o.data.report.incidents.length')" = "0" ] && [ "$(echo "$STATUS" | json 'o.data.report.claims.total')" = "1" ] && pass "no incident; 1 unverified claim; still counted 1" || { echo "$STATUS"; fail "smear"; }
 
+echo "13. opt-in GuardedExecutor: in-manifest calls go through, anything else reverts on-chain"
+EXEC=$(json 'o.guardedExecutor' < "$DEP")
+GAPP=$(cd "$ROOT/contracts" && forge create test/mocks/Targets.sol:GuardedTarget --rpc-url "$RPC" --private-key "$BOB_PK" --broadcast --constructor-args "$BOB" "$EXEC" 2>/dev/null | awk '/Deployed to:/{print $3}')
+[ -n "$GAPP" ] || fail "forge create GuardedTarget"
+mkdir -p "$WORK/guarded-skill"
+cat > "$WORK/guarded-skill/SKILL.md" <<MD
+---
+name: demo-guarded
+description: Pings a contract that only trusts calls routed through the GuardedExecutor.
+license: MIT
+---
+Calls ping() on $GAPP through the GuardedExecutor. Show the user every preview and wait for an explicit yes before executing.
+MD
+cat > "$WORK/guarded-skill/countersign.json" <<JSON
+{ "schema": "countersign.manifest/v1", "chainId": 31337, "publisher": "$BOB", "name": "demo-guarded",
+  "targets": [ { "address": "$GAPP", "label": "Guarded app", "anchor": true, "functions": ["ping()"] } ] }
+JSON
+OUT=$($CLI register "$WORK/guarded-skill" --uri "https://github.com/example/demo/tree/0123abcd/guarded-skill" $COMMON) || { echo "$OUT"; fail "register guarded"; }
+GVERSION=$(echo "$OUT" | json 'o.data.versionId')
+cast send --rpc-url "$RPC" --private-key "$BOB_PK" "$REG" "$(echo "$OUT" | json 'o.data.calldata')" >/dev/null || fail "register guarded tx"
+if cast send --rpc-url "$RPC" --private-key "$DAVE_PK" "$EXEC" 'execute(bytes32,address,bytes)' "$GVERSION" "$GAPP" "$(cast calldata 'sweep()')" >/dev/null 2>&1; then
+  fail "a guarded call outside the manifest should revert"
+else
+  pass "a call outside the manifest through the executor reverts on-chain"
+fi
+$CLI session start --skill "$WORK/guarded-skill" --wallet "$DAVE" $COMMON >/dev/null
+GTX=$(cast send --rpc-url "$RPC" --private-key "$DAVE_PK" "$EXEC" 'execute(bytes32,address,bytes)' "$GVERSION" "$GAPP" "$(cast calldata 'ping()')" --json | json 'o.transactionHash')
+[ "$(cast call --rpc-url "$RPC" "$GAPP" 'lastSender()(address)')" = "$DAVE" ] && pass "the contract saw the user as the caller (ERC-2771), not the executor" || fail "forwarded sender"
+$CLI session record "$GTX" --json >/dev/null
+OUT=$($CLI session end $COMMON)
+GDATA=$(echo "$OUT" | json 'o.data && o.data.calldata || ""')
+[ -n "$GDATA" ] || { echo "$OUT"; fail "guarded session should be clean"; }
+cast send --rpc-url "$RPC" --private-key "$DAVE_PK" "$CS" "$GDATA" >/dev/null || fail "guarded countersign tx"
+$CLI session clear >/dev/null
+STATUS=$($CLI status "$GVERSION" $COMMON $LOCAL)
+[ "$(echo "$STATUS" | json 'o.data.report.countersigns.counted')" = "1" ] && [ "$(echo "$STATUS" | json 'o.data.report.anchors.guarded')" = "1" ] \
+  && pass "the guarded session counts, and the version shows 1 guarded anchor" || { echo "$STATUS"; fail "guarded count"; }
+
 echo "e2e: all checks passed"

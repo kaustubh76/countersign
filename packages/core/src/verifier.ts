@@ -1,4 +1,5 @@
 import {
+  decodeFunctionData,
   getAddress,
   hexToBigInt,
   isAddressEqual,
@@ -43,6 +44,13 @@ import type { AttestationView, RecordView, VersionView } from "./views.js";
  *       reciprocal "you countersign mine, I countersign yours" pair with the author ("peer" count).
  *   (C1, canonical content, is reported per version and does not gate individual records.)
  *
+ * A cited tx sent through the GuardedExecutor counts as the call it carried: execute(versionId, target,
+ * data) is decoded and its inner target, function and value are checked; the versionId must be this one.
+ *
+ * W1 "established": a counted countersigner who also has a counted countersign on a version by another
+ * author. It is computed across the registry (verifySnapshot) and blunts friend networks that only ever
+ * countersign one author. Agent ID age is not used: the registry stores no mint time.
+ *
  * Verified incidents are things a competitor cannot manufacture with their own wallet:
  *   I1 drift        a declared target's code or EIP-1967 implementation changed after registration
  *   I2 author-pull  a tx *sent by the author* moved or approved the reporter's assets outside a declared
@@ -60,6 +68,20 @@ export const TOPIC_APPROVAL: Hex = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7
 export const TOPIC_APPROVAL_FOR_ALL: Hex = "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31";
 export const EIP1967_IMPL_SLOT: Hex = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const SEL_TRANSFER = "0xa9059cbb";
+const SEL_EXECUTE = "0xa05aa016"; // GuardedExecutor.execute(bytes32,address,bytes)
+const EXECUTE_ABI = [
+  {
+    type: "function",
+    name: "execute",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "versionId", type: "bytes32" },
+      { name: "target", type: "address" },
+      { name: "data", type: "bytes" },
+    ],
+    outputs: [{ name: "result", type: "bytes" }],
+  },
+] as const;
 const SEL_TRANSFER_FROM = "0x23b872dd";
 const EMPTY_SELECTOR = "0x00000000";
 
@@ -140,7 +162,8 @@ export interface VersionReport {
   anchors: { declared: number; endorsed: number; guarded: number };
   attestations: AttestationRecord[];
   attestation: AttestationSummary;
-  countersigns: { total: number; counted: number; peer: number; rejected: number; rejectionReasons: Record<string, number> };
+  /** established: counted countersigners who also countersigned another author's skill (null: not computed). */
+  countersigns: { total: number; counted: number; peer: number; rejected: number; established: number | null; rejectionReasons: Record<string, number> };
   incidents: Incident[];
   claims: { total: number; backed: number; corroborated: boolean };
   status: VersionStatus;
@@ -160,6 +183,8 @@ export interface VerifyInput {
   contentError?: string;
   staticCheck?: StaticCheck;
   computedAtBlock?: bigint | null;
+  /** The deployment's GuardedExecutor: txs to it are checked as the inner call they carried. */
+  guardedExecutor?: Address;
 }
 
 const lower = (a: string) => a.toLowerCase();
@@ -176,8 +201,29 @@ function authorSet(v: VersionView): Set<string> {
   return s;
 }
 
+/** The call a tx made: itself, or the inner call of a GuardedExecutor.execute. */
+interface EffectiveCall {
+  to: Address | null;
+  input: Hex;
+  value: bigint;
+  /** Set when the tx went through the GuardedExecutor: the versionId it was checked against. */
+  guardedVersion?: Hex;
+}
+
+function effectiveCall(tx: Transaction, executor: Address | undefined): EffectiveCall {
+  if (executor && tx.to && isAddressEqual(tx.to, executor) && selectorOf(tx.input) === SEL_EXECUTE) {
+    try {
+      const { args } = decodeFunctionData({ abi: EXECUTE_ABI, data: tx.input });
+      return { to: getAddress(args[1]), input: args[2], value: tx.value, guardedVersion: args[0] };
+    } catch {
+      // not a well-formed execute call: check it as an ordinary call (it will not be declared)
+    }
+  }
+  return { to: tx.to ?? null, input: tx.input, value: tx.value };
+}
+
 /** C4 over one receipt: approvals and direct transfers by `signer` must match declared flows. */
-function checkEffects(v: VersionView, tx: Transaction, receipt: TransactionReceipt, signer: Address): string[] {
+function checkEffects(v: VersionView, tx: EffectiveCall, receipt: TransactionReceipt, signer: Address): string[] {
   const reasons: string[] = [];
   const flows = v.flows;
   const selector = selectorOf(tx.input);
@@ -232,6 +278,8 @@ async function checkCitedTx(
   const [tx, receipt] = await Promise.all([src.getTransaction(hash), src.getReceipt(hash)]);
   if (!tx || !receipt || tx.blockNumber == null) return { ok: false, reasons: ["tx-not-found"], anchorHit: false };
   const reasons: string[] = [];
+  const call = effectiveCall(tx, input.guardedExecutor);
+  if (call.guardedVersion !== undefined && call.guardedVersion.toLowerCase() !== v.versionId.toLowerCase()) reasons.push("guarded-other-version");
   if (receipt.status !== "success") reasons.push("tx-failed");
   if (tx.chainId !== undefined && Number(tx.chainId) !== input.chainId) reasons.push("wrong-chain");
   if (!isAddressEqual(tx.from, record.signer)) reasons.push("not-from-signer");
@@ -239,17 +287,17 @@ async function checkCitedTx(
   if (tx.blockNumber > record.blockNumber) reasons.push("after-record");
   else if (opts.requireInWindow && record.blockNumber - tx.blockNumber > SESSION_WINDOW_BLOCKS) reasons.push("outside-window");
 
-  const index = tx.to ? v.targets.findIndex((t) => isAddressEqual(t.target, tx.to as Address)) : -1;
+  const index = call.to ? v.targets.findIndex((t) => isAddressEqual(t.target, call.to as Address)) : -1;
   const target = index >= 0 ? v.targets[index] : undefined;
   if (!target) {
     reasons.push("undeclared-target");
     return { ok: false, reasons, anchorHit: false };
   }
-  const selector = selectorOf(tx.input);
+  const selector = selectorOf(call.input);
   if (!v.permissions.some((p) => p.targetIndex === index && lower(p.selector) === selector)) reasons.push("undeclared-function");
-  if (tx.value > target.maxValue) reasons.push("value-over-cap");
+  if (call.value > target.maxValue) reasons.push("value-over-cap");
   if (await codeChanged(target.target)) reasons.push("target-code-changed");
-  reasons.push(...checkEffects(v, tx, receipt, record.signer));
+  reasons.push(...checkEffects(v, call, receipt, record.signer));
   const anchorHit = (target.flags & FLAG_ANCHOR) !== 0 && target.endorser !== zeroAddress;
   return { ok: reasons.length === 0, reasons, anchorHit };
 }
@@ -285,6 +333,11 @@ async function authorPull(input: VerifyInput, src: TxSource, record: RecordView,
 }
 
 export async function verifyVersionData(input: VerifyInput, src: TxSource): Promise<VersionReport> {
+  return (await verifyWithAgents(input, src)).report;
+}
+
+/** verifyVersionData plus the Agent IDs whose countersigns counted (internal: used for W1, never published). */
+async function verifyWithAgents(input: VerifyInput, src: TxSource): Promise<{ report: VersionReport; counted: Set<string> }> {
   const v = input.version;
   const codeCache = new Map<string, Promise<boolean>>();
   const codeChanged = (target: Address): Promise<boolean> => {
@@ -371,11 +424,14 @@ export async function verifyVersionData(input: VerifyInput, src: TxSource): Prom
   let counted = 0;
   let peer = 0;
   let rejected = 0;
+  const countedAgents = new Set<string>();
   const rejectionReasons: Record<string, number> = {};
   for (const r of input.countersigns) {
     const verdict = await evaluateCountersign(input, src, codeChanged, r, authors, reporterAgents, isPeer);
-    if (verdict.status === "counted") counted++;
-    else if (verdict.status === "peer") peer++;
+    if (verdict.status === "counted") {
+      counted++;
+      countedAgents.add(r.agentId.toString());
+    } else if (verdict.status === "peer") peer++;
     else {
       rejected++;
       for (const reason of new Set(verdict.reasons)) rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
@@ -396,7 +452,7 @@ export async function verifyVersionData(input: VerifyInput, src: TxSource): Prom
           ? "unproven"
           : "ok";
 
-  return {
+  const report: VersionReport = {
     ruleset: RULESET_VERSION,
     versionId: v.versionId,
     computedAtBlock: input.computedAtBlock ?? null,
@@ -414,11 +470,37 @@ export async function verifyVersionData(input: VerifyInput, src: TxSource): Prom
       active: a.active,
     })),
     attestation,
-    countersigns: { total: input.countersigns.length, counted, peer, rejected, rejectionReasons },
+    countersigns: { total: input.countersigns.length, counted, peer, rejected, established: null, rejectionReasons },
     incidents,
     claims: { total: input.reports.length - authorPullReports, backed, corroborated },
     status,
   };
+  return { report, counted: countedAgents };
+}
+
+/**
+ * Verify every version in a registry, and add W1: how many of each version's counted countersigners also
+ * have a counted countersign on a version by a different author. Only aggregate counts leave this function.
+ */
+export async function verifyAllVersions(
+  versions: readonly VerifyInput[],
+  src: TxSource,
+): Promise<Map<Hex, VersionReport>> {
+  const results: { input: VerifyInput; report: VersionReport; counted: Set<string> }[] = [];
+  for (const input of versions) results.push({ input, ...(await verifyWithAgents(input, src)) });
+  const byAuthor = new Map<string, string[]>(); // agentId -> registrant agentIds they counted on
+  for (const r of results) {
+    const author = r.input.version.registrantAgentId.toString();
+    for (const agent of r.counted) byAuthor.set(agent, [...(byAuthor.get(agent) ?? []), author]);
+  }
+  const out = new Map<Hex, VersionReport>();
+  for (const r of results) {
+    const author = r.input.version.registrantAgentId.toString();
+    let established = 0;
+    for (const agent of r.counted) if ((byAuthor.get(agent) ?? []).some((a) => a !== author)) established++;
+    out.set(r.input.version.versionId, { ...r.report, countersigns: { ...r.report.countersigns, established } });
+  }
+  return out;
 }
 
 async function evaluateCountersign(

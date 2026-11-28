@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import { loadSnapshot, verifyFromSnapshot, type SkillFile, type VersionReport } from "@countersign/core";
+import { loadSnapshot, verifySnapshot, type SkillFile, type VersionReport } from "@countersign/core";
 import { checkSkill } from "@countersign/redline";
 import type { Context } from "./context.js";
 
@@ -38,9 +38,13 @@ export async function versionStatus(
     }
   }
   const snap = await loadSnapshot(ctx.reader, ctx.deployment);
-  const report = await verifyFromSnapshot(snap, ctx.chainId, versionId, ctx.reader, {
+  const key = [...snap.versions.keys()].find((k) => k.toLowerCase() === versionId.toLowerCase());
+  if (!key) return { report: null, source: "local" };
+  // The whole registry is verified (W1 "established" needs it); only this version's content is fetched.
+  const reports = await verifySnapshot(snap, ctx.chainId, ctx.reader, {
     staticCheck,
+    contentFor: key,
     ...(opts.noContent ? { fetchContent: false as const } : {}),
   });
-  return { report, source: "local" };
+  return { report: reports.get(key) ?? null, source: "local" };
 }

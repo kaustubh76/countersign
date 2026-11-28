@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   encodeAbiParameters,
+  encodeFunctionData,
   keccak256,
   pad,
   toHex,
@@ -18,6 +19,7 @@ import {
   TOPIC_APPROVAL,
   TOPIC_TRANSFER,
   summarizeAttestations,
+  verifyAllVersions,
   verifyVersionData,
   type TxSource,
   type VerifyInput,
@@ -427,5 +429,76 @@ describe("Red-Line attestations (several attesters)", () => {
     expect(r.attestation.status).toBe("failed");
     expect(r.status).toBe("warning");
     expect(r.attestations).toEqual([expect.objectContaining({ blockNumber: "7", active: true })]);
+  });
+});
+
+describe("GuardedExecutor calls (opt-in, on-chain enforcement)", () => {
+  const EXECUTOR = "0x0000000000000000000000000000000000000E8C" as Address;
+  const execute = (versionId: Hex, target: Address, data: Hex) =>
+    encodeFunctionData({
+      abi: [{ type: "function", name: "execute", stateMutability: "nonpayable", inputs: [{ type: "bytes32" }, { type: "address" }, { type: "bytes" }], outputs: [{ type: "bytes" }] }],
+      functionName: "execute",
+      args: [versionId, target.toLowerCase() as Address, data],
+    });
+  const v1 = keccak256(toHex("v1"));
+
+  it("a session through the executor counts as the inner call it carried", async () => {
+    const chain = new FakeChain();
+    const t = chain.add({ from: BOB, to: EXECUTOR, input: execute(v1, APP, PING), block: 1_500n });
+    const r = await verifyVersionData(input({ countersigns: [record(BOB, 2n, [t])], guardedExecutor: EXECUTOR }), chain);
+    expect(r.countersigns).toMatchObject({ counted: 1, rejected: 0 });
+  });
+
+  it("without the executor configured, the same tx is just an undeclared target", async () => {
+    const chain = new FakeChain();
+    const t = chain.add({ from: BOB, to: EXECUTOR, input: execute(v1, APP, PING), block: 1_500n });
+    const r = await verifyVersionData(input({ countersigns: [record(BOB, 2n, [t])] }), chain);
+    expect(r.countersigns.rejectionReasons).toHaveProperty("undeclared-target");
+  });
+
+  it("an execute checked against another version, or to an undeclared inner target, does not count", async () => {
+    const chain = new FakeChain();
+    const other = chain.add({ from: BOB, to: EXECUTOR, input: execute(keccak256(toHex("other")), APP, PING), block: 1_500n });
+    const router = chain.add({ from: CAROL, to: EXECUTOR, input: execute(v1, ROUTER, PING), block: 1_500n });
+    const r = await verifyVersionData(
+      input({ countersigns: [record(BOB, 2n, [other]), record(CAROL, 3n, [router])], guardedExecutor: EXECUTOR }),
+      chain,
+    );
+    expect(r.countersigns.counted).toBe(0);
+    expect(r.countersigns.rejectionReasons).toMatchObject({ "guarded-other-version": 1, "undeclared-target": 1 });
+  });
+});
+
+describe("W1 established countersigners (history-weighted, across the registry)", () => {
+  it("counts countersigners who also used another author's skill, and only them", async () => {
+    const chain = new FakeChain();
+    const v2Id = keccak256(toHex("v2"));
+    const second = version({ versionId: v2Id, registrantAgentId: 9n, registrant: DAVE, targets: version().targets.map((t, i) => (i === 0 ? { ...t, endorser: DAVE } : t)) });
+    const bobOn1 = chain.add({ from: BOB, to: APP, block: 1_500n });
+    const carolOn1 = chain.add({ from: CAROL, to: APP, block: 1_500n });
+    const bobOn2 = chain.add({ from: BOB, to: APP, block: 1_600n });
+    const reports = await verifyAllVersions(
+      [
+        input({ countersigns: [record(BOB, 2n, [bobOn1]), record(CAROL, 3n, [carolOn1])] }),
+        input({ version: second, countersigns: [{ ...record(BOB, 2n, [bobOn2]), versionId: v2Id }] }),
+      ],
+      chain,
+    );
+    expect(reports.get(keccak256(toHex("v1")))?.countersigns).toMatchObject({ counted: 2, established: 1 });
+    expect(reports.get(v2Id)?.countersigns).toMatchObject({ counted: 1, established: 1 });
+    // a single version on its own cannot know: established is null, not 0
+    expect((await verifyVersionData(input({ countersigns: [record(BOB, 2n, [bobOn1])] }), chain)).countersigns.established).toBeNull();
+  });
+
+  it("two versions by the same author do not make anyone established", async () => {
+    const chain = new FakeChain();
+    const v2Id = keccak256(toHex("v2-same-author"));
+    const a = chain.add({ from: BOB, to: APP, block: 1_500n });
+    const b = chain.add({ from: BOB, to: APP, block: 1_600n });
+    const reports = await verifyAllVersions(
+      [input({ countersigns: [record(BOB, 2n, [a])] }), input({ version: version({ versionId: v2Id }), countersigns: [{ ...record(BOB, 2n, [b]), versionId: v2Id }] })],
+      chain,
+    );
+    expect([...reports.values()].map((r) => r.countersigns.established)).toEqual([0, 0]);
   });
 });

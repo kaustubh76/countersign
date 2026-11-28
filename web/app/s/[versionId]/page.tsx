@@ -91,7 +91,7 @@ export default async function VersionPage({ params }: { params: Promise<{ versio
           <div className="stats">
             <div>
               <b>{r.countersigns.counted}</b>
-              <span>verified countersigns</span>
+              <span>verified countersigns{r.countersigns.established ? ` · ${r.countersigns.established} established` : ""}</span>
             </div>
             <div>
               <b>{r.incidents.length}</b>
