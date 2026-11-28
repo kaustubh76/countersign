@@ -1,10 +1,11 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { decodeFunctionData, getAddress, isAddressEqual, type Address, type Hex } from "viem";
+import { decodeFunctionData, encodeFunctionData, getAddress, isAddressEqual, zeroAddress, type Address, type Hex } from "viem";
 import {
   computeVersionId,
   countersignAbi,
+  FLAG_ANCHOR,
   encodeCountersign,
   encodeReport,
   evaluateRecord,
@@ -23,7 +24,7 @@ import {
   type VersionView,
 } from "@countersign/core";
 import { bool, flag, list, type Args } from "./args.js";
-import { addressArg, bawPreview, loadContext, UsageError, type Context } from "./context.js";
+import { addressArg, bawPreview, loadContext, loadContextOrNull, UsageError, type Context } from "./context.js";
 import { withOwnerPowers } from "./ownerPowers.js";
 import { verdictOf, type Reason, type Result } from "./output.js";
 import { loadSkill, type LoadedSkill } from "./skill.js";
@@ -64,15 +65,45 @@ async function versionOf(ctx: Context, skill: LoadedSkill): Promise<{ versionId:
 
 // ── check-install ──────────────────────────────────────────────────────────────────────────────
 
-/** countersign check-install <skill-dir> [--verify-local]: should the agent trust this skill version? */
+/** Said with every warn or block (§9, red line 8): COUNTERSIGN checks declarations, not trades. */
+export const RISK_NOTICE =
+  "Trading through any skill carries risk of loss. COUNTERSIGN checks what a skill declared and what its users' wallets did, not whether a trade is wise. This is not financial advice.";
+
+/** The human signal, always part of pre-flight (§5.3): verified countersigns and verified incidents. */
+export interface HumanSignal {
+  registered: boolean;
+  attested: boolean;
+  guarded: number;
+  counted: number;
+  established: number | null;
+  incidents: number;
+}
+
+export function signalLine(s: HumanSignal): string {
+  const parts = [s.registered ? "Registered ✓" : "Not registered"];
+  if (s.attested) parts.push("Red-line attested ✓");
+  if (s.guarded) parts.push("Guarded ✓");
+  parts.push(`Countersigned by ${s.counted}${s.established ? ` (${s.established} established)` : ""}`);
+  parts.push(`${s.incidents} verified incident${s.incidents === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
+function withRiskNotice(result: Result): Result {
+  if (result.verdict !== "warn" && result.verdict !== "block") return result;
+  return { ...result, reasons: [...(result.reasons ?? []), { level: "info", text: RISK_NOTICE }], data: { ...result.data, riskNotice: RISK_NOTICE } };
+}
+
+/** countersign check-install <skill-dir> [--verify-local] [--offline]: should the agent trust this skill version? */
 export async function cmdCheckInstall(args: Args): Promise<Result> {
-  const ctx = await loadContext(args);
-  const extraKnown = [ctx.deployment.skillRegistry, ctx.deployment.countersign];
-  const skill = await withOwnerPowers(await loadSkill(skillArg(args), { extraKnown }), args, { reader: ctx.reader, chainId: ctx.chainId, extraKnown });
+  const ctx = await loadContextOrNull(args);
+  const chainId = ctx?.chainId ?? Number(flag(args, "chain") ?? process.env.COUNTERSIGN_CHAIN_ID ?? 56);
+  const extraKnown = ctx ? [ctx.deployment.skillRegistry, ctx.deployment.countersign, ...(ctx.deployment.guardedExecutor ? [ctx.deployment.guardedExecutor] : [])] : [];
+  const skill = await withOwnerPowers(await loadSkill(skillArg(args), { extraKnown }), args, { ...(ctx ? { reader: ctx.reader } : {}), chainId, extraKnown });
   const reasons: Reason[] = [];
   const m = skill.manifest;
+  const signal: HumanSignal = { registered: false, attested: false, guarded: 0, counted: 0, established: null, incidents: 0 };
 
-  // 1. static red lines on the files the agent is about to run
+  // 1. the Red-Line Check on the files the agent is about to run
   for (const r of skill.redline.results) {
     for (const f of r.findings) {
       const level = f.severity === "warn" ? "warn" : HARMFUL_RULES.has(r.rule) ? "block" : "warn";
@@ -80,74 +111,117 @@ export async function cmdCheckInstall(args: Args): Promise<Result> {
     }
   }
   if (!skill.redline.results.some((r) => r.findings.some((f) => f.severity === "fail"))) {
-    reasons.push({ level: "ok", text: "static Red-Line Check: no findings" });
+    reasons.push({ level: "ok", text: "Red-Line Check: no failing rule" });
   }
   for (const n of skill.redline.notes) if (n.startsWith("RL4")) reasons.push({ level: "info", text: n });
 
-  // 2. manifest and registration
+  // 2. manifest, registration, attestation and the human signal
   if (!m) {
-    reasons.push({ level: "warn", text: `${skill.manifestProblem ?? "no countersign.json"}: COUNTERSIGN cannot check this skill's wallet calls` });
+    reasons.push({ level: "warn", text: `${skill.manifestProblem ?? "no countersign.json"}: COUNTERSIGN cannot check this skill's wallet calls, and nobody can countersign it` });
   }
-  const { versionId, registered, publisherHasAgentId } = await versionOf(ctx, skill);
-  if (m && !publisherHasAgentId) reasons.push({ level: "warn", text: `publisher ${m.publisher} holds no Agent ID, so this version cannot be registered` });
-  let summary = "";
-  if (m && versionId && !registered) {
-    reasons.push({ level: "warn", text: "this exact version is not registered: nobody has countersigned it yet" });
-    const others = await readVersionsByContent(ctx.reader, ctx.deployment, skill.content.contentHash);
-    if (others.length) reasons.push({ level: "info", text: `${others.length} non-canonical registration(s) of these files exist (not by the publisher); ignored` });
-    summary = "Not registered";
-  }
-  if (registered && versionId) {
-    reasons.push({ level: "ok", text: `registered by the publisher's Agent ID (block ${registered.registeredBlock})` });
-    const { report, source } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
-    const att = report?.attestation ?? summarizeAttestations(registered.attestations);
-    if (att.status === "passed") {
-      reasons.push({
-        level: "ok",
-        text: `Red-Line attested by ${att.passing} attester${att.passing === 1 ? "" : "s"}: every rule it checked passed${att.ownerPowersChecked ? ", including owner powers (RL4)" : "; owner powers (RL4) were not checked"}`,
-      });
-    } else if (att.status === "failed") {
-      reasons.push({ level: "warn", text: "a Red-Line attester recorded failed rules for this version" });
-    } else {
-      reasons.push({ level: "warn", text: "no Red-Line attestation" });
+  if (!ctx) {
+    reasons.push({ level: "warn", text: `COUNTERSIGN is not deployed on chain ${chainId} yet: only the Red-Line Check ran, and nobody can have countersigned this skill` });
+  } else if (m) {
+    const { versionId, registered, publisherHasAgentId } = await versionOf(ctx, skill);
+    if (!publisherHasAgentId) reasons.push({ level: "warn", text: `publisher ${m.publisher} holds no Agent ID, so this version cannot be registered or countersigned` });
+    if (versionId && !registered) {
+      reasons.push({ level: "warn", text: "this exact version is not registered: nobody has countersigned it yet" });
+      const others = await readVersionsByContent(ctx.reader, ctx.deployment, skill.content.contentHash);
+      if (others.length) reasons.push({ level: "info", text: `${others.length} non-canonical registration(s) of these files exist (not by the publisher); ignored` });
     }
-    if (report) {
-      for (const inc of report.incidents) reasons.push({ level: "block", text: `verified incident (${inc.kind}): ${inc.detail}${inc.txHash ? ` (${inc.txHash})` : ""}` });
-      const n = report.countersigns.counted;
-      reasons.push({
-        level: n > 0 ? "ok" : "warn",
-        text: `countersigned by ${n} Agent ID holder${n === 1 ? "" : "s"} whose own on-chain sessions were verified (${source === "api" ? "via the COUNTERSIGN API" : "verified locally from chain data"})`,
-      });
-      if (report.countersigns.peer) reasons.push({ level: "info", text: `${report.countersigns.peer} more from reciprocal author pairs (not counted)` });
-      if (report.anchors.endorsed === 0) reasons.push({ level: "warn", text: "no endorsed anchor: no countersign can count yet" });
-      if (report.claims.total) {
+    if (registered && versionId) {
+      signal.registered = true;
+      reasons.push({ level: "ok", text: `registered by the publisher's Agent ID (block ${registered.registeredBlock})` });
+      const { report, source } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
+      const att = report?.attestation ?? summarizeAttestations(registered.attestations);
+      signal.attested = att.status === "passed";
+      if (att.status === "passed") {
         reasons.push({
-          level: report.claims.corroborated ? "warn" : "info",
-          text: `${report.claims.total} unverified report(s)${report.claims.corroborated ? ", corroborated by 3+ independent users" : ""}`,
+          level: "ok",
+          text: `Red-Line attested by ${att.passing} attester${att.passing === 1 ? "" : "s"}: every rule it checked passed${att.ownerPowersChecked ? ", including owner powers (RL4)" : "; owner powers (RL4) were not checked"}`,
         });
+      } else if (att.status === "failed") {
+        reasons.push({ level: "warn", text: "a Red-Line attester recorded failed rules for this version" });
+      } else {
+        reasons.push({ level: "warn", text: "no Red-Line attestation" });
       }
-      if (report.canonical === "mismatch") reasons.push({ level: "warn", text: `published content check failed: ${report.canonicalDetail.join("; ")}` });
-      summary = `Registered ✓ · Countersigned by ${n} · ${report.incidents.length} verified incident${report.incidents.length === 1 ? "" : "s"}`;
+      signal.guarded = registered.targets.filter((t) => (t.flags & FLAG_ANCHOR) !== 0 && t.endorser !== zeroAddress && t.guarded === true).length;
+      if (signal.guarded) {
+        reasons.push({ level: "ok", text: "the author's contract accepts calls through COUNTERSIGN's GuardedExecutor: routed calls revert on-chain outside the manifest (use check-call --guarded)" });
+      }
+      if (report) {
+        signal.counted = report.countersigns.counted;
+        signal.established = report.countersigns.established;
+        signal.incidents = report.incidents.length;
+        for (const inc of report.incidents) reasons.push({ level: "block", text: `verified incident (${inc.kind}): ${inc.detail}${inc.txHash ? ` (${inc.txHash})` : ""}` });
+        const n = report.countersigns.counted;
+        reasons.push({
+          level: n > 0 ? "ok" : "warn",
+          text: `countersigned by ${n} Agent ID holder${n === 1 ? "" : "s"} whose own on-chain sessions were verified${report.countersigns.established ? ` (${report.countersigns.established} also used other authors' skills)` : ""} (${source === "api" ? "via the COUNTERSIGN API" : "verified locally from chain data"})`,
+        });
+        if (report.countersigns.peer) reasons.push({ level: "info", text: `${report.countersigns.peer} more from reciprocal author pairs (not counted)` });
+        if (report.anchors.endorsed === 0) reasons.push({ level: "warn", text: "no endorsed anchor: no countersign can count yet" });
+        if (report.claims.total) {
+          reasons.push({
+            level: report.claims.corroborated ? "warn" : "info",
+            text: `${report.claims.total} unverified report(s)${report.claims.corroborated ? ", corroborated by 3+ independent users" : ""}`,
+          });
+        }
+        if (report.canonical === "mismatch") reasons.push({ level: "warn", text: `published content check failed: ${report.canonicalDetail.join("; ")}` });
+      }
     }
+    return withRiskNotice(installResult(reasons, signal, { versionId, contentHash: skill.content.contentHash, manifestHash: m.manifestHash }));
   }
+  return withRiskNotice(installResult(reasons, signal, { versionId: null, contentHash: skill.content.contentHash, manifestHash: m?.manifestHash ?? null }));
+}
 
+function installResult(reasons: Reason[], signal: HumanSignal, ids: Record<string, unknown>): Result {
   const verdict = verdictOf(reasons);
+  const line = signalLine(signal);
+  const blocks = reasons.filter((r) => r.level === "block").map((r) => r.text.split(" (")[0]);
   return {
     ok: true,
     command: "check-install",
     verdict,
-    say:
-      verdict === "block"
-        ? `Blocked: ${reasons.filter((r) => r.level === "block").map((r) => r.text.split(" (")[0]).slice(0, 3).join("; ")}.`
-        : verdict === "warn"
-          ? `Use with caution${summary ? ` (${summary})` : ""}.`
-          : `${summary || "OK"}.`,
+    say: verdict === "block" ? `Blocked: ${blocks.slice(0, 3).join("; ")}. (${line})` : verdict === "warn" ? `Use with caution (${line}).` : `${line}.`,
     reasons,
-    data: { versionId, contentHash: skill.content.contentHash, manifestHash: m?.manifestHash ?? null },
+    data: { ...ids, signal },
   };
 }
 
 // ── check-call ─────────────────────────────────────────────────────────────────────────────────
+
+type TokenCall = { functionName: string; args?: readonly unknown[] };
+
+function decodeTokenCall(data: Hex): TokenCall | null {
+  try {
+    return decodeFunctionData({ abi: TOKEN_ABI, data });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A call from a skill that declares nothing (no countersign.json). Nothing can be in-manifest, but some calls
+ * are never safe to preview: an approval for the maximum amount, or an operator approval over a whole
+ * collection (§13: the demo's bundled approval). Everything else warns.
+ */
+export function checkCallWithoutManifest(to: Address, data: Hex, value: bigint): Reason[] {
+  const reasons: Reason[] = [{ level: "warn", text: "this skill declares no permissions (no countersign.json), so the call cannot be checked against them" }];
+  const d = decodeTokenCall(data);
+  const [a0, a1] = d?.args ?? [];
+  if (d && (d.functionName === "approve" || d.functionName === "increaseAllowance")) {
+    const spender = getAddress(a0 as string);
+    if ((a1 as bigint) === MAX_UINT256) reasons.push({ level: "block", text: `approval for the maximum amount to ${spender}` });
+    reasons.push({ level: "warn", text: `approval to ${spender}, a spender the skill never declared` });
+  } else if (d && d.functionName === "setApprovalForAll" && a1 === true) {
+    reasons.push({ level: "block", text: `operator approval over every token of ${to} to ${getAddress(a0 as string)}, which the skill never declared` });
+  } else if (d && (d.functionName === "transfer" || d.functionName === "transferFrom")) {
+    reasons.push({ level: "warn", text: "token transfer to a recipient the skill never declared" });
+  }
+  if (value > 0n) reasons.push({ level: "warn", text: `sends ${value} wei of native value` });
+  return reasons;
+}
 
 export function checkCallAgainstManifest(
   m: ParsedManifest,
@@ -173,12 +247,7 @@ export function checkCallAgainstManifest(
   }
   if (value > target.maxValue) reasons.push({ level: "block", text: `sends ${value} wei, above the declared cap of ${target.maxValue}` });
 
-  let decoded: { functionName: string; args?: readonly unknown[] } | null = null;
-  try {
-    decoded = decodeFunctionData({ abi: TOKEN_ABI, data });
-  } catch {
-    decoded = null;
-  }
+  const decoded = decodeTokenCall(data);
   if (decoded) {
     const flowFor = (kind: number, counterparty: Address) =>
       m.onchain.flows.find((f) => f.kind === kind && isAddressEqual(f.token, to) && isAddressEqual(f.counterparty, counterparty));
@@ -206,27 +275,86 @@ export function checkCallAgainstManifest(
   return reasons;
 }
 
-/** countersign check-call --skill <dir> --to <addr> --data <hex> [--value <wei>] [--from <wallet>] */
+const EXECUTE_ABI = [
+  {
+    type: "function",
+    name: "execute",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "bytes32" }, { type: "address" }, { type: "bytes" }],
+    outputs: [{ type: "bytes" }],
+  },
+] as const;
+const FORWARDER_ABI = [{ type: "function", name: "isTrustedForwarder", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "bool" }] }] as const;
+const TOKEN_SELECTORS = new Set(["0x095ea7b3", "0x39509351", "0xa9059cbb", "0x23b872dd", "0xa22cb465", "0xd505accf"]);
+
+/**
+ * countersign check-call --skill <dir> --to <addr> --data <hex> [--value <wei>] [--from <wallet>] [--guarded]
+ * Before every preview: is the call inside what the skill declared? With --guarded (and an author contract
+ * that accepts it), the preview is routed through the GuardedExecutor, so the chain itself refuses anything
+ * outside the manifest. A call already addressed to the executor is checked as the call it carries.
+ */
 export async function cmdCheckCall(args: Args): Promise<Result> {
   const skill = await loadSkill(skillArg(args));
-  const to = addressArg(flag(args, "to"), "--to");
-  const data = (flag(args, "data") ?? "0x") as Hex;
+  let to = addressArg(flag(args, "to"), "--to");
+  let data = (flag(args, "data") ?? "0x") as Hex;
   if (!/^0x([0-9a-fA-F]{2})*$/.test(data)) throw new UsageError("--data must be hex");
   const value = BigInt(flag(args, "value") ?? "0");
   const wallet = flag(args, "from") ? addressArg(flag(args, "from"), "--from") : null;
+  const ctx = await loadContextOrNull(args);
+  const executor = ctx?.deployment.guardedExecutor;
+  const pre: Reason[] = [];
+  let routedVersion: Hex | null = null;
+  if (executor && isAddressEqual(to, executor)) {
+    try {
+      const { args: x } = decodeFunctionData({ abi: EXECUTE_ABI, data });
+      routedVersion = x[0];
+      to = getAddress(x[1]);
+      data = x[2];
+      pre.push({ level: "info", text: `addressed to the GuardedExecutor: checking the call it carries, to ${to}` });
+    } catch {
+      return withRiskNotice({ ok: true, command: "check-call", verdict: "block", say: "Blocked: a malformed GuardedExecutor call.", reasons: [{ level: "block", text: "not an execute(bytes32,address,bytes) call" }] });
+    }
+  }
+
   if (!skill.manifest) {
-    return {
+    const reasons = [...pre, ...checkCallWithoutManifest(to, data, value)];
+    const verdict = verdictOf(reasons);
+    return withRiskNotice({
       ok: true,
       command: "check-call",
-      verdict: "warn",
-      say: "This skill declares no permissions, so COUNTERSIGN cannot check this call. Show the user the full preview before confirming.",
-      reasons: [{ level: "warn", text: skill.manifestProblem ?? "no countersign.json" }],
-    };
+      verdict,
+      say:
+        verdict === "block"
+          ? `Blocked: ${reasons.filter((r) => r.level === "block").map((r) => r.text).join("; ")}. Do not preview or execute it; tell the user.`
+          : "This skill declares no permissions, so COUNTERSIGN cannot check this call. Show the user the full preview before confirming.",
+      reasons,
+    });
   }
-  const reasons = checkCallAgainstManifest(skill.manifest, to, data, value, wallet);
-  const verdict = verdictOf(reasons);
+
+  const reasons = [...pre, ...checkCallAgainstManifest(skill.manifest, to, data, value, wallet)];
   const chainId = Number(flag(args, "chain") ?? skill.manifest.chainId);
-  return {
+  const next: NonNullable<Result["next"]> = [];
+  let guardedRoute = false;
+  if (ctx && (bool(args, "guarded") || routedVersion) && executor && verdictOf(reasons) !== "block") {
+    const { versionId } = await versionOf(ctx, skill);
+    if (routedVersion && versionId && routedVersion.toLowerCase() !== versionId.toLowerCase()) {
+      reasons.push({ level: "block", text: "the guarded call names a different skill version than this one" });
+    } else if (versionId) {
+      const trusted = await ctx.reader.client.readContract({ address: to, abi: FORWARDER_ABI, functionName: "isTrustedForwarder", args: [executor] }).catch(() => false);
+      const selector = data.slice(0, 10).toLowerCase();
+      if (!trusted) reasons.push({ level: "info", text: "this contract does not accept the GuardedExecutor: preview the call directly" });
+      else if (value > 0n || TOKEN_SELECTORS.has(selector)) reasons.push({ level: "info", text: "the GuardedExecutor forwards no value and no token movements: preview this call directly" });
+      else {
+        guardedRoute = true;
+        reasons.push({ level: "ok", text: "routed through the GuardedExecutor: the chain refuses it if it leaves the manifest" });
+        if (wallet) next.push({ what: "Preview (sends nothing), routed through the GuardedExecutor:", run: bawPreview(chainId, wallet, executor, encodeFunctionData({ abi: EXECUTE_ABI, functionName: "execute", args: [versionId, to, data] }), 0n) });
+      }
+    }
+  }
+  const verdict = verdictOf(reasons);
+  if (verdict !== "block" && wallet && !guardedRoute) next.push({ what: "Preview (sends nothing):", run: bawPreview(chainId, wallet, to, data, value) });
+  if (verdict !== "block" && wallet) next.push({ what: `Then check Binance's simulation: countersign check-preview --skill ${skill.dir} --preview <preview JSON>` });
+  return withRiskNotice({
     ok: true,
     command: "check-call",
     verdict,
@@ -235,14 +363,8 @@ export async function cmdCheckCall(args: Args): Promise<Result> {
         ? `Blocked: this call is outside what the skill declared (${reasons.filter((r) => r.level === "block").map((r) => r.text).join("; ")}). Do not preview or execute it; tell the user.`
         : "Inside the skill's declared permissions. Preview it, show the user the result, and wait for an explicit yes.",
     reasons,
-    next:
-      verdict === "block" || !wallet
-        ? []
-        : [
-            { what: "Preview (sends nothing):", run: bawPreview(chainId, wallet, to, data, value) },
-            { what: `Then check Binance's simulation: countersign check-preview --skill ${skill.dir} --preview <preview JSON>` },
-          ],
-  };
+    next,
+  });
 }
 
 // ── check-preview ──────────────────────────────────────────────────────────────────────────────
@@ -268,13 +390,13 @@ export async function cmdCheckPreview(args: Args): Promise<Result> {
   const raw = (await readPreviewArg(args)) as Record<string, unknown>;
   if (raw.success === false) {
     const err = (raw.error ?? {}) as Record<string, unknown>;
-    return {
+    return withRiskNotice({
       ok: true,
       command: "check-preview",
       verdict: "block",
       say: `The wallet refused to preview this call (${String(err.code ?? "")} ${String(err.name ?? err.message ?? "")}). Do not execute; tell the user.`,
       reasons: [{ level: "block", text: String(err.message ?? "preview failed") }],
-    };
+    });
   }
   const data = ((raw.data ?? raw) as Record<string, unknown>) ?? {};
   const sim = (data.simulationResult ?? {}) as Record<string, unknown>;
@@ -320,7 +442,7 @@ export async function cmdCheckPreview(args: Args): Promise<Result> {
 
   const verdict = verdictOf(reasons);
   const requestId = typeof data.requestId === "string" ? data.requestId : undefined;
-  return {
+  return withRiskNotice({
     ok: true,
     command: "check-preview",
     verdict,
@@ -336,7 +458,7 @@ export async function cmdCheckPreview(args: Args): Promise<Result> {
             { what: "Only after the user explicitly says yes:", run: `baw contract-call execute --requestId ${requestId} --json` },
             { what: "Then record the tx in the session:", run: "countersign session record <txHash>" },
           ],
-  };
+  });
 }
 
 // ── sessions ───────────────────────────────────────────────────────────────────────────────────
@@ -575,3 +697,85 @@ export async function cmdStatus(args: Args): Promise<Result> {
   };
 }
 
+
+// ── choosing between skills (§6.3) ─────────────────────────────────────────────────────────────
+
+export interface Candidate {
+  name: string;
+  versionId: Hex | null;
+  /** A harmful red-line finding in its files, or a verified incident: never prefer it. */
+  blocked: string | null;
+  signal: HumanSignal;
+}
+
+/** Incidents and harmful findings rank last, then more verified countersigns, established, attested, registered. */
+export function rankCandidates(list: readonly Candidate[]): Candidate[] {
+  const key = (c: Candidate): number[] => [
+    c.blocked || c.signal.incidents > 0 ? 1 : 0,
+    -c.signal.counted,
+    -(c.signal.established ?? 0),
+    c.signal.attested ? 0 : 1,
+    c.signal.registered ? 0 : 1,
+  ];
+  return [...list].sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i]! - kb[i]!;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * countersign choose <skill-dir | versionId> <skill-dir | versionId> ...
+ * The decision fake downloads used to make: which of these skills should the agent pick? By verified
+ * countersigns and incidents, never by popularity.
+ */
+export async function cmdChoose(args: Args): Promise<Result> {
+  const items = args.positionals.slice(1);
+  if (items.length < 2) throw new UsageError("usage: countersign choose <skill-dir | versionId> <skill-dir | versionId> ...");
+  const ctx = await loadContextOrNull(args);
+  const candidates: Candidate[] = [];
+  for (const item of items) {
+    const signal: HumanSignal = { registered: false, attested: false, guarded: 0, counted: 0, established: null, incidents: 0 };
+    let blocked: string | null = null;
+    let versionId: Hex | null = /^0x[0-9a-fA-F]{64}$/.test(item) ? (item as Hex) : null;
+    let name = versionId ? `${versionId.slice(0, 10)}…` : item;
+    if (!versionId) {
+      const skill = await loadSkill(item);
+      name = skill.manifest?.name ?? item;
+      const harmful = skill.redline.results.filter((r) => !r.passed && HARMFUL_RULES.has(r.rule)).map((r) => r.rule);
+      if (harmful.length) blocked = `fails ${harmful.join(", ")}`;
+      if (ctx) versionId = (await versionOf(ctx, skill)).versionId;
+    }
+    if (ctx && versionId) {
+      const { report } = await versionStatus(ctx, versionId, { local: bool(args, "verify-local"), noContent: bool(args, "no-content") });
+      if (report) {
+        signal.registered = true;
+        signal.attested = report.attestation.status === "passed";
+        signal.guarded = report.anchors.guarded;
+        signal.counted = report.countersigns.counted;
+        signal.established = report.countersigns.established;
+        signal.incidents = report.incidents.length;
+        if (report.incidents.length) blocked ??= `${report.incidents.length} verified incident${report.incidents.length === 1 ? "" : "s"}`;
+      }
+    }
+    candidates.push({ name, versionId, blocked, signal });
+  }
+  const ranked = rankCandidates(candidates);
+  const top = ranked[0]!;
+  const reasons: Reason[] = ranked.map((c, i) => ({
+    level: c.blocked ? "block" : c.signal.counted > 0 ? "ok" : "warn",
+    text: `${i + 1}. ${c.name}: ${signalLine(c.signal)}${c.blocked ? ` · do not use: ${c.blocked}` : ""}`,
+  }));
+  if (!ctx) reasons.push({ level: "info", text: "COUNTERSIGN is not deployed on this chain yet: ranked by the Red-Line Check only" });
+  return {
+    ok: true,
+    command: "choose",
+    verdict: top.blocked ? "block" : top.signal.counted > 0 ? "allow" : "warn",
+    say: top.blocked
+      ? "None of these is safe to prefer: every one fails a red line or has a verified incident."
+      : `Prefer ${top.name}: ${signalLine(top.signal)}.`,
+    reasons,
+    data: { ranking: ranked },
+  };
+}

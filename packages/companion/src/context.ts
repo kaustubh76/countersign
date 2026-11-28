@@ -48,6 +48,19 @@ export async function loadContext(args: Args): Promise<Context> {
   };
 }
 
+/**
+ * Like loadContext, but null when no COUNTERSIGN deployment is known for the chain (before mainnet, say), so
+ * pre-flight can still run its static checks instead of failing.
+ */
+export async function loadContextOrNull(args: Args): Promise<Context | null> {
+  try {
+    return await loadContext(args);
+  } catch (e) {
+    if (e instanceof UsageError && /no COUNTERSIGN deployment is known/.test(e.message)) return null;
+    throw e;
+  }
+}
+
 export class UsageError extends Error {
   override name = "UsageError";
 }

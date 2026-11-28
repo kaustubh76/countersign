@@ -31,6 +31,7 @@ It prints `baw contract-call preview` commands. The user decides every `execute`
 3. Never ask the user for wallet secrets of any kind. COUNTERSIGN only reads public chain data and the files of the skill being checked.
 4. Before any countersign or report, tell the user plainly: *this transaction is public and permanently links this wallet and its Agent ID to this skill version on BNB Smart Chain.* COUNTERSIGN's site shows counts only, never who, but the chain is public.
 5. A `block` verdict means stop. Explain the reasons to the user in plain words, and do not preview or execute that call.
+6. With every `warn` or `block`, also read the user the `riskNotice` that comes with it.
 
 ## Get the wallet address once
 
@@ -45,7 +46,7 @@ baw wallet agent-id --json       # countersigning needs claimed: true
 node scripts/countersign.mjs check-install <skill-dir> --json
 ```
 
-Read `verdict`, `say` and `reasons` to the user, for example: *"Registered ✓ · Countersigned by 27 · 0 verified incidents."*
+Read `verdict`, `say` and `reasons` to the user, for example: *"Registered ✓ · Red-line attested ✓ · Countersigned by 27 · 0 verified incidents."*
 
 | Verdict | What to do |
 |---|---|
@@ -54,6 +55,16 @@ Read `verdict`, `say` and `reasons` to the user, for example: *"Registered ✓ �
 | `block` | Do not use the skill. The reasons say why (a verified incident, or the skill's own files ask for something the red lines forbid). |
 
 Add `--verify-local` to verify from chain data on this machine instead of asking COUNTERSIGN's API.
+
+## Choosing between skills
+
+When several skills could do the job, let verified use decide, never download counts:
+
+```sh
+node scripts/countersign.mjs choose <skill-dir or versionId> <skill-dir or versionId> --json
+```
+
+Skills with a verified incident or a harmful red-line finding rank last, then more verified countersigns win. Tell the user which one it prefers, and why.
 
 ## 2. Before every wallet call the skill asks for
 
@@ -64,6 +75,7 @@ node scripts/countersign.mjs check-call --skill <skill-dir> --to <address> --dat
 ```
 
 - `block`: stop. The call goes outside what the skill declared. Tell the user.
+- If `check-install` said **Guarded ✓**, add `--guarded`: the preview it prints goes through COUNTERSIGN's GuardedExecutor, so the chain itself refuses the call if it leaves what the skill declared.
 - Otherwise run the printed `baw contract-call preview …` command, then check Binance's simulation of it:
 
 ```sh
@@ -108,6 +120,8 @@ Ship a `countersign.json` permission manifest inside the skill folder. The manif
 
 Mark your own contract as `"anchor": true`: countersigns must touch a contract you provably own.
 
+Say what your contracts' owner can do (mint, change fees, pause, blacklist, withdraw, upgrade) in your SKILL.md. The Red-Line Check reads those powers from the verified source (RL4), so verify your contracts on Sourcify, where anyone can re-read them without a key.
+
 ```sh
 node scripts/countersign.mjs manifest <skill-dir> --json     # validate countersign.json
 node scripts/countersign.mjs redline <skill-dir> --json      # static Red-Line Check
@@ -124,6 +138,7 @@ node scripts/countersign.mjs register <skill-dir> --uri https://github.com/<owne
   - drains through signatures (permit, Permit2);
   - addresses the skill fetches at runtime;
   - built-in wallet actions, whose calldata the agent never sees.
+- COUNTERSIGN's own contracts: the SkillRegistry owner can only add or remove Red-Line attesters; Countersign and the GuardedExecutor have no owner, and none of them holds funds.
 - Verified incidents are limited to what nobody can fake from their own wallet:
   - the author's contract code or proxy implementation changed after registration;
   - a transaction sent by the author moved the user's tokens;

@@ -179,4 +179,16 @@ MD
 if attest "$VERSION" --content "$WORK/demo-skill" --from "$ATTESTER" --out "$WORK/attestations" $COMMON >/dev/null 2>&1; then fail "changed content must not be attested"; else pass "changed files are refused (not the registered content)"; fi
 rm -f "$WORK/demo-skill/EXTRA.md"
 
+echo "16. the §13 planted skill is blocked at install and at the call; --guarded routes previews through the executor"
+D=$(node "$ROOT/demo/make-attack-skill.mjs")
+OUT=$($CLI check-install "$D" $COMMON --offline)
+[ "$(echo "$OUT" | json 'o.verdict')" = "block" ] && echo "$OUT" | json 'o.say' | grep -q "Countersigned by 0" \
+  && pass "the planted skill is BLOCKED at install: $(echo "$OUT" | json 'o.say.split(".")[0]')" || { echo "$OUT"; fail "planted skill at install"; }
+BIG=$(cast calldata 'approve(address,uint256)' 0x000000000000000000000000000000000000bEEF "$(cast max-uint)")
+[ "$($CLI check-call --skill "$D" --to 0x55d398326f99059fF775485246999027B3197955 --data "$BIG" $COMMON | json 'o.verdict')" = "block" ] \
+  && pass "its bundled max approval is BLOCKED before any preview" || fail "planted approval at the call"
+rm -rf "$D"
+GOUT=$($CLI check-call --skill "$WORK/guarded-skill" --to "$GAPP" --data "$(cast calldata 'ping()')" --from "$DAVE" --guarded $COMMON)
+echo "$GOUT" | json 'o.next[0].run' | grep -qi -- "--to $EXEC" && pass "check-call --guarded prints the preview routed through the GuardedExecutor" || { echo "$GOUT"; fail "guarded route"; }
+
 echo "e2e: all checks passed"

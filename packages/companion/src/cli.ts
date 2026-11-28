@@ -1,6 +1,6 @@
 import { bool, parseArgs, type Args } from "./args.js";
 import { cmdEndorse, cmdHash, cmdManifest, cmdRedline, cmdRegister } from "./author.js";
-import { cmdCheckCall, cmdCheckInstall, cmdCheckPreview, cmdCountersign, cmdReport, cmdSession, cmdStatus } from "./user.js";
+import { cmdCheckCall, cmdCheckInstall, cmdCheckPreview, cmdChoose, cmdCountersign, cmdReport, cmdSession, cmdStatus } from "./user.js";
 import { UsageError } from "./context.js";
 import { print, type Result } from "./output.js";
 
@@ -17,25 +17,29 @@ const COMMANDS: Record<string, (args: Args) => Promise<Result>> = {
   countersign: cmdCountersign,
   report: cmdReport,
   status: cmdStatus,
+  choose: cmdChoose,
 };
 
 const HELP = `countersign: proof-of-use trust for agent skills (BNB Smart Chain)
 
 User commands (run inside the user's agent, next to the Agentic Wallet skill)
   check-install <skill-dir>                before installing or first using a skill: allow / warn / block
-  check-call --skill <dir> --to <a> --data <hex> [--value <wei>] [--from <wallet>]
+  check-call --skill <dir> --to <a> --data <hex> [--value <wei>] [--from <wallet>] [--guarded]
                                            before every \`baw contract-call preview\`: is the call declared?
+                                           (--guarded routes it through the GuardedExecutor when the author's
+                                           contract accepts it, so the chain refuses anything undeclared)
   check-preview --skill <dir> --preview <file|-|json>
                                            after preview: do Binance's simulated effects match the manifest?
   session start --skill <dir> --wallet <a> | record <txHash> [--builtin] | status | end | clear
                                            prove a clean session, then offer a countersign (or a report)
   status <versionId | skill-dir>           verified counts and incidents for a version
+  choose <dir|versionId> <dir|versionId>…  which skill to prefer: verified countersigns, never downloads
   countersign | report <versionId> <txHash>... --from <wallet>     manual calldata (simulated first)
 
 Author commands
   hash <skill-dir>                         content hash + file list
   manifest <skill-dir>                     validate countersign.json, show the on-chain form
-  redline <skill-dir>                      static Red-Line Check (+ report hash)
+  redline <skill-dir> [--contracts a,b]    Red-Line Check, RL4 included (+ report hash)
   register <skill-dir> --uri <url>         check, simulate, and print the baw preview command
   endorse <versionId> <targetIndex>        calldata for the anchor's owner
 
@@ -45,6 +49,8 @@ Common flags
   --rpc <url[,url]>      RPC endpoints (default: public BSC endpoints with fallback)
   --verify-local         verify from chain data here instead of asking the COUNTERSIGN API
   --no-content           skip fetching published content (C1 / static incidents) when verifying locally
+  --contracts <a,b>      your own contracts, for RL4 (owner powers read from verified source)
+  --offline              skip RL4's verified-source lookups
 
 This tool never signs or sends anything. Every on-chain step is a \`baw contract-call preview\` command for
 the agent to run, followed by an explicit "yes" from the user before \`baw contract-call execute\`.
