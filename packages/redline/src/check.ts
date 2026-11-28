@@ -393,8 +393,9 @@ function ownerPowers(
     });
     if (role !== "project") continue; // third-party and mentioned contracts are listed, never a finding
     projects++;
-    const fail = (message: string, snippet: string) =>
-      findings.push({ rule: "RL4", severity: "fail", file: where, line: 1, snippet, message });
+    // where the fix goes: the manifest for a declaration, SKILL.md for a disclosure
+    const fail = (message: string, snippet: string, file = where) =>
+      findings.push({ rule: "RL4", severity: "fail", file, line: 1, snippet, message });
     if (c.status === "unverified") {
       fail(`${label}: its source is not verified on BscScan (red line 4 asks for open source)`, c.address);
       continue;
@@ -410,7 +411,7 @@ function ownerPowers(
     }
     for (const p of powers) {
       if (p.dead || isDisclosed(p, prose)) continue;
-      fail(`${label}: an admin can ${POWER_WORDS[p.category]} (${p.signature ?? p.fn}, ${p.guard}), and the skill does not say so`, `${p.signature ?? p.fn} · ${p.guard}`);
+      fail(`${label}: an admin can ${POWER_WORDS[p.category]} (${p.signature ?? p.fn}, ${p.guard}), and the skill does not say so`, `${p.signature ?? p.fn} · ${p.guard}`, "SKILL.md");
     }
   }
   // A definite failure stands even if another contract could not be read; a pass needs every one.
@@ -422,6 +423,27 @@ function ownerPowers(
       ? ["RL4 not checked: no project contracts (anchor or pull targets in countersign.json, or contracts given with the skill)"]
       : inconclusive.map((x) => `RL4 not checked: ${x}`);
   return { findings, notes, checked, summaries };
+}
+
+/**
+ * The addresses RL4 should read for a skill: the contracts given with it, the manifest's targets, and, when
+ * there is no manifest, the contract addresses its files mention. Well-known tokens are left out.
+ */
+export function contractCandidates(files: readonly SkillFile[], manifest: ParsedManifest | null, explicit: readonly string[] = [], max = 24): Address[] {
+  const out = new Map<string, Address>();
+  const add = (a: string) => {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(a)) return;
+    const c = getAddress(a.toLowerCase() as Address);
+    if (c !== zeroAddress && !WELL_KNOWN[c.toLowerCase()]) out.set(c.toLowerCase(), c);
+  };
+  for (const a of explicit) add(a.trim());
+  if (manifest) for (const t of manifest.onchain.targets) add(t.target);
+  else
+    for (const f of files) {
+      const text = decodeText(f);
+      if (text) for (const m of text.matchAll(ADDRESS_RE)) add(m[0]);
+    }
+  return [...out.values()].slice(0, max);
 }
 
 export function allPassed(report: RedlineReport): boolean {

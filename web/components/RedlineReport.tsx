@@ -62,6 +62,38 @@ export function RedlineReportView({ view }: { view: CheckView }) {
       </div>
       {view.redact ? <p className="tiny faint">Snippets hidden for the sample, so its wording never appears on this site.</p> : null}
 
+      {report.input.contracts?.length ? (
+        <div className="ledger rl-contracts">
+          {report.input.contracts.map((c) => (
+            <div key={c.address} className="ledger-row">
+              <span className="k">{c.contractName ?? "contract"}</span>
+              <span className="why">
+                {c.address.slice(0, 6)}…{c.address.slice(-4)} · {c.role} · {c.status === "verified" ? c.provider : c.status}
+              </span>
+              <span className="leader" />
+              <span className="powers">
+                {c.powers.filter((p) => !p.dead).length
+                  ? c.powers
+                      .filter((p) => !p.dead)
+                      .map((p) => `${p.category}${c.role === "project" ? (p.disclosed ? " ✓" : " ✗") : ""}`)
+                      .filter((x, i, all) => all.indexOf(x) === i)
+                      .join(" · ")
+                  : c.status === "verified"
+                    ? "no admin powers"
+                    : "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {!report.results.some((r) => r.rule === "RL4") ? (
+        <p className="tiny faint">
+          RL4, owner powers:{" "}
+          {report.notes.find((n) => n.startsWith("RL4"))?.replace(/^RL4 not checked: /, "not checked: ") ??
+            (view.source === "github" ? "not checked" : "runs on the GitHub tab, where your contracts' verified source is read")}
+        </p>
+      ) : null}
+
       <div className="rl-meta">
         <div>
           <div className="k">Checked</div>

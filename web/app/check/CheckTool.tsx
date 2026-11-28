@@ -39,6 +39,7 @@ function localView(files: SkillFile[], label: string, source: CheckView["source"
 export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
   const [tab, setTab] = useState<Tab>("github");
   const [uri, setUri] = useState("");
+  const [contracts, setContracts] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<CheckView | null>(null);
@@ -53,12 +54,17 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
     if (v) setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
-  const runGithub = useCallback(async (target: string) => {
+  const runGithub = useCallback(async (target: string, own = "") => {
     setBusy(true);
     setError(null);
     setView(null);
     try {
-      const res = await fetch("/api/v1/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ uri: target }) });
+      const given = own.split(/[\s,]+/).filter(Boolean);
+      const res = await fetch("/api/v1/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ uri: target, ...(given.length ? { contracts: given } : {}) }),
+      });
       const body = (await res.json()) as {
         error?: string;
         report?: RedlineReport;
@@ -88,7 +94,8 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
       void runGithub(selfSkillUri);
     } else if (q.get("uri")) {
       setUri(q.get("uri")!);
-      void runGithub(q.get("uri")!);
+      setContracts(q.get("contracts") ?? "");
+      void runGithub(q.get("uri")!, q.get("contracts") ?? "");
     }
   }, [runAttack, runGithub, selfSkillUri]);
 
@@ -130,7 +137,7 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
             className="check"
             onSubmit={(e) => {
               e.preventDefault();
-              void runGithub(uri.trim());
+              void runGithub(uri.trim(), contracts);
             }}
           >
             <input
@@ -144,8 +151,16 @@ export function CheckTool({ selfSkillUri }: { selfSkillUri: string | null }) {
             <button type="submit" className="btn seal" disabled={busy}>
               {busy ? "Checking…" : "Run check"}
             </button>
+            <input
+              className="check-contracts"
+              value={contracts}
+              onChange={(e) => setContracts(e.target.value)}
+              placeholder="your contracts, optional: 0x…, 0x…"
+              spellCheck={false}
+              aria-label="Your own contract addresses (optional), for RL4 owner powers"
+            />
           </form>
-          <p className="mono-line">pinned to a commit · read-only · nothing stored</p>
+          <p className="mono-line">pinned to a commit · read-only · nothing stored · RL4 reads your contracts&apos; verified source</p>
         </div>
       ) : null}
 

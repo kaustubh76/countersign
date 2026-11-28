@@ -148,4 +148,17 @@ STATUS=$($CLI status "$GVERSION" $COMMON $LOCAL)
 [ "$(echo "$STATUS" | json 'o.data.report.countersigns.counted')" = "1" ] && [ "$(echo "$STATUS" | json 'o.data.report.anchors.guarded')" = "1" ] \
   && pass "the guarded session counts, and the version shows 1 guarded anchor" || { echo "$STATUS"; fail "guarded count"; }
 
+echo "14. RL4: owner powers read from the anchor's source (a local source on anvil; Sourcify on BSC)"
+RL4=$($CLI redline "$WORK/demo-skill" --chain 31337 --rpc "$RPC" --source "$APP=$ROOT/contracts/test/mocks/Targets.sol:OwnedTarget" --json)
+[ "$(echo "$RL4" | json 'String((o.data.report.results.find(r=>r.rule==="RL4")||{}).passed)')" = "true" ] \
+  && pass "RL4 checked and passed: the anchor has no admin powers" || { echo "$RL4"; fail "RL4 on the demo anchor"; }
+cat > "$WORK/Minty.sol" <<SOL
+pragma solidity ^0.8.20;
+contract Minty { address public owner; modifier onlyOwner() { require(msg.sender == owner); _; } function mint(address to, uint256 n) external onlyOwner { to; n; } function ping() external {} }
+SOL
+RL4=$($CLI redline "$WORK/demo-skill" --chain 31337 --rpc "$RPC" --source "$APP=$WORK/Minty.sol:Minty" --json)
+echo "$RL4" | json '(o.data.report.results.find(r=>r.rule==="RL4")||{findings:[]}).findings.map(f=>f.message).join("|")' | grep -q "an admin can mint new tokens" \
+  && pass "an undisclosed owner mint fails RL4" || { echo "$RL4"; fail "RL4 negative"; }
+if $CLI redline "$WORK/demo-skill" --chain 56 --source "$APP=$WORK/Minty.sol:Minty" --json >/dev/null 2>&1; then fail "--source must be refused on chain 56"; else pass "--source is refused on BNB Smart Chain"; fi
+
 echo "e2e: all checks passed"

@@ -12,6 +12,7 @@ import { allPassed } from "@countersign/redline";
 import { bool, flag, type Args } from "./args.js";
 import { addressArg, bawPreview, loadContext, UsageError, type Context } from "./context.js";
 import type { Reason, Result } from "./output.js";
+import { withOwnerPowers } from "./ownerPowers.js";
 import { loadSkill, type LoadedSkill } from "./skill.js";
 
 const OWNER_ABI = [
@@ -32,17 +33,19 @@ function skillDirArg(args: Args): string {
   return dir;
 }
 
-function redlineReasons(skill: LoadedSkill): Reason[] {
+/** Findings as reasons. `soft` rules only warn (RL4 at registration: fix it before asking for an attestation). */
+function redlineReasons(skill: LoadedSkill, soft: ReadonlySet<string> = new Set()): Reason[] {
   const out: Reason[] = [];
   for (const r of skill.redline.results) {
     if (r.passed && r.findings.length === 0) continue;
     for (const finding of r.findings) {
       out.push({
-        level: finding.severity === "fail" ? "block" : "warn",
+        level: finding.severity === "fail" && !soft.has(r.rule) ? "block" : "warn",
         text: `${r.rule} ${finding.message} (${finding.file}:${finding.line})`,
       });
     }
   }
+  for (const n of skill.redline.notes) if (n.startsWith("RL4")) out.push({ level: "info", text: n });
   return out;
 }
 
@@ -76,9 +79,13 @@ export async function cmdManifest(args: Args): Promise<Result> {
   };
 }
 
-/** countersign redline <skill-dir>: the static Red-Line Check, with its report hash. */
+/**
+ * countersign redline <skill-dir> [--contracts a,b] [--offline]: the Red-Line Check, with its report hash.
+ * RL4 reads the verified source of the skill's contracts (Sourcify; BscScan with a paid key).
+ */
 export async function cmdRedline(args: Args): Promise<Result> {
-  const skill = await loadSkill(skillDirArg(args), { checkerCommit: flag(args, "checker-commit") ?? null });
+  const checkerCommit = flag(args, "checker-commit") ?? null;
+  const skill = await withOwnerPowers(await loadSkill(skillDirArg(args), { checkerCommit }), args, { checkerCommit });
   const passed = allPassed(skill.redline);
   return {
     ok: true,
@@ -99,7 +106,8 @@ export async function cmdRedline(args: Args): Promise<Result> {
  */
 export async function cmdRegister(args: Args): Promise<Result> {
   const ctx = await loadContext(args);
-  const skill = await loadSkill(skillDirArg(args), { extraKnown: [ctx.deployment.skillRegistry, ctx.deployment.countersign] });
+  const extraKnown = [ctx.deployment.skillRegistry, ctx.deployment.countersign];
+  const skill = await withOwnerPowers(await loadSkill(skillDirArg(args), { extraKnown }), args, { reader: ctx.reader, chainId: ctx.chainId, extraKnown });
   const uri = flag(args, "uri");
   if (!uri) throw new UsageError("missing --uri <contentURI>, e.g. https://github.com/<owner>/<repo>/tree/<commit>/<path>");
   if (!skill.manifest) return { ok: false, command: "register", say: skill.manifestProblem ?? "no manifest" };
@@ -164,9 +172,12 @@ export async function cmdRegister(args: Args): Promise<Result> {
     reasons.push({ level: "warn", text: "no anchor declared: countersigns cannot count until an author-owned contract is declared" });
   }
 
-  reasons.push(...redlineReasons(skill));
-  if (!allPassed(skill.redline) && !bool(args, "force")) {
+  reasons.push(...redlineReasons(skill, new Set(["RL4"])));
+  const failing = skill.redline.results.filter((r) => !r.passed);
+  if (failing.some((r) => r.rule !== "RL4") && !bool(args, "force")) {
     reasons.push({ level: "block", text: "fix the Red-Line findings first (or pass --force to register anyway)" });
+  } else if (failing.some((r) => r.rule === "RL4")) {
+    reasons.push({ level: "warn", text: "RL4: disclose the owner powers in SKILL.md before you ask for a Red-Line attestation" });
   }
 
   const data = encodeRegister(skill.content.contentHash, uri, m.onchain);

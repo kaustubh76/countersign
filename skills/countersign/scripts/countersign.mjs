@@ -22980,6 +22980,117 @@ var POWER_WORDS = {
   upgrade: "replace the contract's code",
   call: "make arbitrary calls from the contract"
 };
+function blank(src) {
+  const out = src.split("");
+  const n = src.length;
+  let i = 0;
+  while (i < n) {
+    const c = src[i];
+    const d = src[i + 1];
+    if (c === "/" && d === "/") {
+      while (i < n && src[i] !== "\n") out[i++] = " ";
+    } else if (c === "/" && d === "*") {
+      out[i] = out[i + 1] = " ";
+      i += 2;
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) {
+        if (src[i] !== "\n") out[i] = " ";
+        i++;
+      }
+      if (i < n) {
+        out[i] = out[i + 1] = " ";
+        i += 2;
+      }
+    } else if (c === '"' || c === "'") {
+      i++;
+      while (i < n && src[i] !== c && src[i] !== "\n") {
+        if (src[i] === "\\" && i + 1 < n) out[i++] = " ";
+        out[i++] = " ";
+      }
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return out.join("");
+}
+function matching(text, open, o = "{", c = "}") {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === o) depth++;
+    else if (text[i] === c && --depth === 0) return i;
+  }
+  return text.length - 1;
+}
+function lineAt(text, index2) {
+  let line = 1;
+  for (let i = 0; i < index2; i++) if (text.charCodeAt(i) === 10) line++;
+  return line;
+}
+var splitTop = (s) => {
+  const parts = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of s) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts;
+};
+var UNIT_RE = /\b(abstract\s+contract|contract|library|interface)\s+([A-Za-z_$][\w$]*)\s*(?:is\s+([^{]*?))?\s*\{/g;
+function unitsOf(file, text) {
+  const units = [];
+  for (const m of text.matchAll(UNIT_RE)) {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const kind = m[1].startsWith("library") ? "library" : m[1].startsWith("interface") ? "interface" : "contract";
+    const parents = m[3] ? splitTop(m[3]).map((p) => p.trim().split(/[\s(]/)[0]).filter(Boolean) : [];
+    units.push({ kind, name: m[2], parents, file, text, start: open, end: matching(text, open) });
+  }
+  return units;
+}
+var FN_RE = /\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g;
+var MOD_RE = /\bmodifier\s+([A-Za-z_$][\w$]*)\s*[({]/g;
+function functionsOf(u) {
+  const out = [];
+  const body = u.text.slice(u.start, u.end + 1);
+  for (const m of body.matchAll(FN_RE)) {
+    const openParen = u.start + (m.index ?? 0) + m[0].length - 1;
+    const closeParen = matching(u.text, openParen, "(", ")");
+    let i = closeParen + 1;
+    let depth = 0;
+    while (i < u.end && !(depth === 0 && (u.text[i] === "{" || u.text[i] === ";"))) {
+      if (u.text[i] === "(") depth++;
+      else if (u.text[i] === ")") depth--;
+      i++;
+    }
+    if (u.text[i] !== "{") continue;
+    const close = matching(u.text, i);
+    out.push({
+      name: m[1],
+      params: u.text.slice(openParen + 1, closeParen),
+      header: u.text.slice(closeParen + 1, i),
+      body: u.text.slice(i + 1, close),
+      bodyAt: i + 1,
+      unit: u
+    });
+  }
+  return out;
+}
+function modifiersOf(u) {
+  const out = /* @__PURE__ */ new Map();
+  const body = u.text.slice(u.start, u.end + 1);
+  for (const m of body.matchAll(MOD_RE)) {
+    let i = u.start + (m.index ?? 0) + m[0].length - 1;
+    if (u.text[i] === "(") i = matching(u.text, i, "(", ")") + 1;
+    while (i < u.end && u.text[i] !== "{" && u.text[i] !== ";") i++;
+    out.set(m[1], u.text[i] === "{" ? u.text.slice(i + 1, matching(u.text, i)) : "");
+  }
+  return out;
+}
 var ADMIN_WORDS = "(?:owner|admin|administrator|role|roles|operator|gov|governance|governor|guardian|manager|minter|pauser|keeper|signer|auth|authorized|authorised|controller|dev|team|multisig|treasury|deployer)";
 var ADMIN_MODIFIER_RE = new RegExp(`^(?:_?only_?${ADMIN_WORDS}\\w*|${ADMIN_WORDS}_?only|if_?${ADMIN_WORDS}|requiresauth|auth|isowner|isadmin)$`, "i");
 var ADMIN_NAMES = "(?:owner|admin|administrator|governance|governor|gov|operator|guardian|manager|dev|deployer|controller|signer|treasury|multisig|team|minter|pauser|keeper)";
@@ -22997,6 +23108,142 @@ var ADMIN_CHECK_RE = new RegExp(
   ].join("|"),
   "i"
 );
+var KEYWORDS = /* @__PURE__ */ new Set(["public", "external", "internal", "private", "view", "pure", "payable", "nonpayable", "virtual", "override", "returns", "constant"]);
+function guardOf(fn, modifiers2) {
+  const header = fn.header.replace(/\breturns\s*\(/g, "returns(");
+  for (const m of header.matchAll(/\b([A-Za-z_$][\w$]*)\s*(\([^)]*\))?/g)) {
+    const name = m[1];
+    if (KEYWORDS.has(name)) continue;
+    if (name === "returns") continue;
+    const body = modifiers2.get(name);
+    if (ADMIN_MODIFIER_RE.test(name) || body !== void 0 && ADMIN_CHECK_RE.test(body)) {
+      return `${name}${m[2] ? m[2].replace(/\s+/g, "") : ""}`;
+    }
+  }
+  const check = ADMIN_CHECK_RE.exec(fn.body);
+  return check ? check[0].replace(/\s+/g, " ").trim().slice(0, 48) : null;
+}
+var visibilityOf = (header) => /\b(public|external|internal|private)\b/.exec(header)?.[1] ?? "public";
+var readOnly = (header) => /\b(view|pure|constant)\b/.test(header);
+var OWNERSHIP_FUNCTIONS = /* @__PURE__ */ new Set([
+  "transferOwnership",
+  "renounceOwnership",
+  "acceptOwnership",
+  "setOwner",
+  "setPendingOwner",
+  "claimOwnership",
+  "transferAdmin",
+  "changeAdmin",
+  "grantRole",
+  "revokeRole",
+  "renounceRole",
+  "grantRoles",
+  "revokeRoles",
+  "renounceRoles",
+  "beginDefaultAdminTransfer",
+  "cancelDefaultAdminTransfer",
+  "acceptDefaultAdminTransfer",
+  "changeDefaultAdminDelay",
+  "rollbackDefaultAdminDelay",
+  "requestOwnershipHandover",
+  "cancelOwnershipHandover",
+  "completeOwnershipHandover"
+]);
+var NAME_RULES = [
+  ["mint", /^(?:mint\w*|minter|airdrop\w*)$/],
+  ["fee", /^(?:fees?|tax(?:es)?|commission|royalty|royalties)$/],
+  ["pause", /^(?:pause|unpause|paused|halt)$/],
+  ["freeze", /^(?:freeze|unfreeze|frozen|blacklist\w*|blocklist\w*|denylist\w*|ban|unban|bot|bots|lock|unlock|restrict\w*|exclude\w*)$/],
+  ["withdraw", /^(?:withdraw\w*|sweep\w*|rescue\w*|recover\w*|drain\w*|skim|payout|emergency)$/],
+  ["upgrade", /^(?:upgrade\w*|implementation|migrate|migration)$/],
+  ["call", /^(?:execute|exec|multicall|delegate)$/]
+];
+var BODY_RULES = [
+  ["mint", /\b_?\w*[mM]int\w*\s*\(|\b_?totalSupply\s*\+=/],
+  ["pause", /\b_(?:un)?pause\s*\(|\bpaused\s*=\s*(?:true|false)\b/],
+  ["fee", /\b\w*(?:[fF]ee|[tT]ax)\w*\s*(?:\[[^\]]*\]\s*)*(?:=(?!=)|\+=|-=)/],
+  ["freeze", /\b\w*(?:[bB]lacklist|[bB]locklist|[dD]enylist|[fF]rozen|[bB]anned|[bB]locked|[iI]sBot|[bB]ots)\w*\s*(?:\[[^\]]*\]\s*)*=(?!=)/],
+  ["withdraw", /\.(?:transfer|send)\s*\(|\.call\s*\{\s*value\s*:|\bsafeTransfer(?:From)?\s*\(|\bsendValue\s*\(/],
+  ["upgrade", /\b_?upgradeTo\w*\s*\(|\b_setImplementation\s*\(|\bERC1967Utils\s*\.\s*upgrade/],
+  ["call", /\.delegatecall\s*\(/]
+];
+var words = (name) => name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").replace(/[_$]+/g, " ").toLowerCase().split(/\s+/).filter(Boolean);
+var GETTER_NAMES = /* @__PURE__ */ new Set(["admin", "implementation", "owner", "getOwner", "pendingOwner"]);
+function categoriesOf(fn) {
+  const out = /* @__PURE__ */ new Set();
+  if (GETTER_NAMES.has(fn.name) && fn.params.trim() === "") return out;
+  for (const w of words(fn.name)) for (const [cat, re] of NAME_RULES) if (re.test(w)) out.add(cat);
+  for (const [cat, re] of BODY_RULES) if (re.test(fn.body)) out.add(cat);
+  if (/\bbytes\b/.test(fn.params) && /\.call\s*(?:\{[^}]*\})?\s*\(/.test(fn.body)) out.add("call");
+  if (out.has("upgrade")) out.delete("call");
+  return out;
+}
+var signatureOf = (f) => `${f.name}(${(f.inputs ?? []).map((i) => i.type).join(",")})`;
+function analyzeSources(input) {
+  const contractName = input.contractName ?? null;
+  if (input.language && !/solidity/i.test(input.language)) {
+    return { contractName, powers: [], others: [], undetermined: `${input.language} source is not analysed` };
+  }
+  const units = [];
+  for (const path of Object.keys(input.sources).sort()) {
+    units.push(...unitsOf(path, blank((input.sources[path] ?? "").replace(/\r\n?/g, "\n"))));
+  }
+  if (units.length === 0) return { contractName, powers: [], others: [], undetermined: "no Solidity contracts found in the source" };
+  let scope = units.filter((u) => u.kind === "contract");
+  if (contractName && units.some((u) => u.name === contractName)) {
+    const seen = /* @__PURE__ */ new Set();
+    const queue = [contractName];
+    while (queue.length) {
+      const name = queue.shift();
+      if (seen.has(name)) continue;
+      seen.add(name);
+      for (const u of units) if (u.name === name) queue.push(...u.parents);
+    }
+    scope = units.filter((u) => seen.has(u.name) && u.kind === "contract");
+  }
+  const modifiers2 = /* @__PURE__ */ new Map();
+  for (const u of scope) for (const [k, v] of modifiersOf(u)) if (!modifiers2.has(k) || v) modifiers2.set(k, v);
+  const defs = scope.flatMap(functionsOf);
+  const abiFns = input.abi?.filter((f) => f.type === "function" && f.name && f.stateMutability !== "view" && f.stateMutability !== "pure");
+  const abiNames = abiFns ? new Set(abiFns.map((f) => f.name)) : null;
+  const signatures = /* @__PURE__ */ new Map();
+  for (const f of abiFns ?? []) signatures.set(f.name, [...signatures.get(f.name) ?? [], signatureOf(f)]);
+  const powers = [];
+  const others = /* @__PURE__ */ new Set();
+  const seenPower = /* @__PURE__ */ new Set();
+  for (const fn of defs) {
+    const callable = abiNames ? abiNames.has(fn.name) : visibilityOf(fn.header) === "public" || visibilityOf(fn.header) === "external";
+    const uups = fn.name === "_authorizeUpgrade";
+    if (!uups && (!callable || readOnly(fn.header) || OWNERSHIP_FUNCTIONS.has(fn.name))) continue;
+    const guard = guardOf(fn, modifiers2);
+    if (!guard) continue;
+    const cats = uups ? /* @__PURE__ */ new Set(["upgrade"]) : categoriesOf(fn);
+    if (cats.size === 0) {
+      if (!GETTER_NAMES.has(fn.name)) others.add(fn.name);
+      continue;
+    }
+    const name = uups ? "upgradeToAndCall" : fn.name;
+    const sigs = uups ? ["upgradeToAndCall(address,bytes)"] : signatures.get(fn.name) ?? [];
+    for (const category of cats) {
+      const key = `${category}:${name}`;
+      if (seenPower.has(key)) continue;
+      seenPower.add(key);
+      powers.push({
+        category,
+        fn: name,
+        ...sigs.length === 1 ? { signature: sigs[0] } : {},
+        guard,
+        file: fn.unit.file,
+        line: lineAt(fn.unit.text, fn.bodyAt)
+      });
+    }
+  }
+  powers.sort((a, b) => a.category.localeCompare(b.category) || a.fn.localeCompare(b.fn));
+  return { contractName, powers, others: [...others].filter((o) => !powers.some((p) => p.fn === o)).sort() };
+}
+function markRenounced(powers) {
+  return powers.map((p) => /owner/i.test(p.guard) && !/role/i.test(p.guard) ? { ...p, dead: true } : p);
+}
 var DISCLOSURE_WORDS = {
   mint: /\bmint/i,
   fee: /\b(?:fees?|tax(?:es)?|commission)\b/i,
@@ -23295,7 +23542,7 @@ function ownerPowers(files, manifest, contracts, explicit) {
     });
     if (role !== "project") continue;
     projects++;
-    const fail = (message, snippet) => findings.push({ rule: "RL4", severity: "fail", file: where, line: 1, snippet, message });
+    const fail = (message, snippet, file = where) => findings.push({ rule: "RL4", severity: "fail", file, line: 1, snippet, message });
     if (c.status === "unverified") {
       fail(`${label2}: its source is not verified on BscScan (red line 4 asks for open source)`, c.address);
       continue;
@@ -23311,13 +23558,29 @@ function ownerPowers(files, manifest, contracts, explicit) {
     }
     for (const p of powers) {
       if (p.dead || isDisclosed(p, prose)) continue;
-      fail(`${label2}: an admin can ${POWER_WORDS[p.category]} (${p.signature ?? p.fn}, ${p.guard}), and the skill does not say so`, `${p.signature ?? p.fn} · ${p.guard}`);
+      fail(`${label2}: an admin can ${POWER_WORDS[p.category]} (${p.signature ?? p.fn}, ${p.guard}), and the skill does not say so`, `${p.signature ?? p.fn} · ${p.guard}`, "SKILL.md");
     }
   }
   const failed = findings.length > 0;
   const checked = projects > 0 && (failed || inconclusive.length === 0);
   const notes = checked ? [] : projects === 0 ? ["RL4 not checked: no project contracts (anchor or pull targets in countersign.json, or contracts given with the skill)"] : inconclusive.map((x) => `RL4 not checked: ${x}`);
   return { findings, notes, checked, summaries };
+}
+function contractCandidates(files, manifest, explicit = [], max = 24) {
+  const out = /* @__PURE__ */ new Map();
+  const add = (a) => {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(a)) return;
+    const c = getAddress(a.toLowerCase());
+    if (c !== zeroAddress && !WELL_KNOWN[c.toLowerCase()]) out.set(c.toLowerCase(), c);
+  };
+  for (const a of explicit) add(a.trim());
+  if (manifest) for (const t of manifest.onchain.targets) add(t.target);
+  else
+    for (const f of files) {
+      const text = decodeText(f);
+      if (text) for (const m of text.matchAll(ADDRESS_RE)) add(m[0]);
+    }
+  return [...out.values()].slice(0, max);
 }
 function allPassed(report) {
   return report.rulesPassed === report.rulesChecked;
@@ -23390,8 +23653,223 @@ function bawPreview(chainId, from15, to, data, valueWei = 0n) {
   ].join(" ");
 }
 
-// src/skill.ts
+// src/ownerPowers.ts
 import { readFile as readFile3 } from "node:fs/promises";
+import { basename } from "node:path";
+
+// ../redline/src/sources.ts
+var SOURCIFY_BASE = "https://sourcify.dev/server";
+var ETHERSCAN_V2 = "https://api.etherscan.io/v2/api";
+var IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+var BEACON_SLOT = "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50";
+var CLONE_RE = /^0x363d3d373d3d3d363d73([0-9a-f]{40})5af43d82803e903d91602b57fd5bf3$/i;
+var LOCAL_CHAINS = /* @__PURE__ */ new Set([31337, 1337]);
+function sourceHashOf(files) {
+  const pairs = Object.keys(files).sort().map((p) => [p, files[p] ?? ""]);
+  return keccak256(toBytes(JSON.stringify(pairs)));
+}
+function slotAddress(word3) {
+  if (!word3 || word3 === "0x") return null;
+  const hex = word3.slice(2).padStart(64, "0").slice(-40);
+  const a = getAddress(`0x${hex}`);
+  return a === zeroAddress ? null : a;
+}
+async function get(url, opts) {
+  const f = opts.fetchImpl ?? fetch;
+  return f(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? 15e3), headers: { accept: "application/json" } });
+}
+async function fromSourcify(address, opts) {
+  const base = (opts.sourcifyBase ?? SOURCIFY_BASE).replace(/\/$/, "");
+  try {
+    const res = await get(`${base}/v2/contract/${opts.chainId}/${address.toLowerCase()}?fields=sources,compilation,abi`, opts);
+    if (res.status === 404) return { kind: "missing", detail: "not on Sourcify" };
+    if (!res.ok) return { kind: "error", detail: `Sourcify answered ${res.status}` };
+    const j = await res.json();
+    if (!j.match || !j.sources) return { kind: "missing", detail: "not on Sourcify" };
+    const files = {};
+    for (const [path, f] of Object.entries(j.sources)) files[path] = f.content ?? "";
+    return {
+      kind: "verified",
+      v: { provider: "sourcify", files, contractName: j.compilation?.name ?? null, abi: j.abi ?? null, language: j.compilation?.language ?? null }
+    };
+  } catch (e) {
+    return { kind: "error", detail: `Sourcify unreachable: ${e.message}` };
+  }
+}
+function parseEtherscanSource(sourceCode, contractName) {
+  const t = sourceCode.trim();
+  if (t.startsWith("{")) {
+    try {
+      const json = JSON.parse(t.startsWith("{{") ? t.slice(1, -1) : t);
+      const sources = json.sources ?? json;
+      const files = {};
+      for (const [path, f] of Object.entries(sources)) if (f && typeof f.content === "string") files[path] = f.content;
+      if (Object.keys(files).length) return files;
+    } catch {
+    }
+  }
+  return { [`${contractName || "Contract"}.sol`]: sourceCode };
+}
+async function fromEtherscan(address, opts) {
+  const key = opts.etherscanKey;
+  if (!key) return { kind: "missing", detail: "BscScan not consulted (needs a paid Etherscan API key)" };
+  try {
+    const url = `${ETHERSCAN_V2}?chainid=${opts.chainId}&module=contract&action=getsourcecode&address=${address}&apikey=${encodeURIComponent(key)}`;
+    const res = await get(url, opts);
+    if (!res.ok) return { kind: "error", detail: `Etherscan answered ${res.status}` };
+    const j = await res.json();
+    if (j.status !== "1" || !Array.isArray(j.result) || !j.result[0]) return { kind: "error", detail: `Etherscan: ${String(j.result ?? j.message ?? "error").slice(0, 120)}` };
+    const r = j.result[0];
+    if (!r.SourceCode) return { kind: "unverified" };
+    let abi2 = null;
+    try {
+      abi2 = JSON.parse(r.ABI ?? "null");
+    } catch {
+      abi2 = null;
+    }
+    return {
+      kind: "verified",
+      v: {
+        provider: "etherscan",
+        files: parseEtherscanSource(r.SourceCode, r.ContractName ?? ""),
+        contractName: r.ContractName || null,
+        abi: abi2,
+        language: /vyper/i.test(r.CompilerVersion ?? "") ? "Vyper" : "Solidity"
+      }
+    };
+  } catch (e) {
+    return { kind: "error", detail: `Etherscan unreachable: ${e.message}` };
+  }
+}
+async function lookup(address, opts) {
+  const local = opts.localSources ? Object.entries(opts.localSources).find(([a]) => a.toLowerCase() === address.toLowerCase())?.[1] : void 0;
+  if (local) {
+    if (!LOCAL_CHAINS.has(opts.chainId)) return { kind: "error", detail: "local sources are only accepted on a local chain" };
+    return { kind: "verified", v: { provider: "local", files: local.files, contractName: local.contractName ?? null, abi: null, language: "Solidity" } };
+  }
+  if (LOCAL_CHAINS.has(opts.chainId)) return { kind: "missing", detail: "no verified-source service for a local chain (pass a local source)" };
+  const s = await fromSourcify(address, opts);
+  if (s.kind === "verified") return s;
+  const e = await fromEtherscan(address, opts);
+  if (e.kind === "verified" || e.kind === "unverified") return e;
+  const detail = [s, e].map((x) => x.kind === "missing" || x.kind === "error" ? x.detail : "").filter(Boolean).join("; ");
+  return { kind: s.kind === "error" || e.kind === "error" ? "error" : "missing", detail };
+}
+function withAnalysis(base, analysis) {
+  return {
+    ...base,
+    contractName: analysis.contractName ?? base.contractName ?? null,
+    powers: analysis.powers,
+    others: analysis.others,
+    ...analysis.undetermined ? { status: "unavailable", detail: analysis.undetermined } : {}
+  };
+}
+async function analyzeOne(address, opts, depth) {
+  const a = getAddress(address);
+  let code;
+  try {
+    code = await opts.getCode(a);
+  } catch (e) {
+    return { address: a, status: "unavailable", powers: [], others: [], detail: `could not read code: ${e.message.split("\n")[0]}` };
+  }
+  if (!code || code === "0x") return { address: a, status: "no-code", powers: [], others: [], detail: `no contract code on chain ${opts.chainId}` };
+  const codehash = keccak256(code);
+  let proxy;
+  const clone = CLONE_RE.exec(code);
+  if (clone) proxy = { kind: "clone", implementation: getAddress(`0x${clone[1]}`) };
+  else if (opts.getStorageAt) {
+    const impl = slotAddress(await opts.getStorageAt(a, IMPL_SLOT).catch(() => void 0));
+    const beacon = impl ? null : slotAddress(await opts.getStorageAt(a, BEACON_SLOT).catch(() => void 0));
+    if (impl) proxy = { kind: "eip1967", implementation: impl };
+    else if (beacon) proxy = { kind: "beacon", implementation: null };
+  }
+  let owner;
+  if (opts.readOwner) owner = await opts.readOwner(a).catch(() => null);
+  const found = await lookup(a, opts);
+  const base = { address: a, codehash, ...owner !== void 0 ? { owner } : {}, ...proxy ? { proxy } : {} };
+  let result;
+  if (found.kind === "verified") {
+    const analysis = analyzeSources({ sources: found.v.files, contractName: found.v.contractName, abi: found.v.abi, language: found.v.language });
+    result = withAnalysis({ ...base, status: "verified", provider: found.v.provider, contractName: found.v.contractName, sourceHash: sourceHashOf(found.v.files) }, analysis);
+    if (owner === zeroAddress) result.powers = markRenounced(result.powers);
+  } else if (found.kind === "unverified") {
+    result = { ...base, status: "unverified", provider: "etherscan", powers: [], others: [], detail: "source is not verified on BscScan" };
+  } else {
+    result = { ...base, status: "unavailable", powers: [], others: [], detail: found.detail };
+  }
+  if (proxy) {
+    if (proxy.kind !== "clone") {
+      result.powers = [...result.powers, { category: "upgrade", fn: "(proxy admin)", guard: proxy.kind === "beacon" ? "beacon owner" : "proxy admin" }];
+    }
+    if (proxy.implementation && depth === 0) result.implementation = await analyzeOne(proxy.implementation, opts, 1);
+    else if (!proxy.implementation) {
+      result.status = result.status === "verified" ? "unavailable" : result.status;
+      result.detail = "beacon proxy: the implementation was not resolved";
+    }
+  }
+  return result;
+}
+async function analyzeContracts(addresses, opts) {
+  const unique = [...new Map(addresses.map((a) => [a.toLowerCase(), a])).values()];
+  return Promise.all(unique.map((a) => analyzeOne(a, opts, 0)));
+}
+
+// src/ownerPowers.ts
+var OWNER_ABI = [{ type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] }];
+var LOCAL_CHAINS2 = /* @__PURE__ */ new Set([31337, 1337]);
+function explicitContracts(args) {
+  return list(args, "contracts").map((a) => {
+    if (!isAddress(a, { strict: false })) throw new UsageError(`--contracts: not an address: ${a}`);
+    return getAddress(a.toLowerCase());
+  });
+}
+async function localSources(args, chainId) {
+  const specs = list(args, "source");
+  if (!specs.length) return void 0;
+  if (!LOCAL_CHAINS2.has(chainId)) {
+    throw new UsageError("--source is only for local chains (anvil). On BNB Smart Chain, RL4 reads the verified source from Sourcify or BscScan.");
+  }
+  const out = {};
+  for (const spec of specs) {
+    const m = /^(0x[0-9a-fA-F]{40})=(.+?)(?::([A-Za-z_$][\w$]*))?$/.exec(spec);
+    if (!m) throw new UsageError(`--source: expected <address>=<file.sol>[:Contract], got ${spec}`);
+    out[m[1].toLowerCase()] = { files: { [basename(m[2])]: await readFile3(m[2], "utf8") }, ...m[3] ? { contractName: m[3] } : {} };
+  }
+  return out;
+}
+async function withOwnerPowers(skill, args, opts = {}) {
+  if (bool(args, "offline")) return skill;
+  const chainId = opts.chainId ?? Number(flag(args, "chain") ?? skill.manifest?.chainId ?? 56);
+  const explicit = explicitContracts(args);
+  const local = await localSources(args, chainId);
+  const rpc = flag(args, "rpc");
+  const reader = opts.reader ?? createReader({ chainId, rpcUrls: rpc ? rpc.split(",") : rpcUrlsFromEnv() });
+  const addresses = contractCandidates(skill.files, skill.manifest, explicit);
+  const contracts = await analyzeContracts(addresses, {
+    chainId,
+    getCode: (a) => reader.getCode(a),
+    getStorageAt: (a, slot) => reader.getStorageAt(a, slot),
+    readOwner: async (a) => {
+      try {
+        return await reader.client.readContract({ address: a, abi: OWNER_ABI, functionName: "owner" });
+      } catch {
+        return null;
+      }
+    },
+    ...process.env.ETHERSCAN_API_KEY ? { etherscanKey: process.env.ETHERSCAN_API_KEY } : {},
+    ...local ? { localSources: local } : {}
+  });
+  const redline = checkSkill(skill.files, {
+    extraKnown: opts.extraKnown,
+    checkerCommit: opts.checkerCommit ?? skill.redline.checkerCommit,
+    contracts,
+    projectContracts: explicit
+  });
+  return { ...skill, redline, redlineHash: reportHash(redline) };
+}
+
+// src/skill.ts
+import { readFile as readFile4 } from "node:fs/promises";
 import { join as join2 } from "node:path";
 async function loadSkill(dir, opts = {}) {
   const files = await readSkillDir(dir);
@@ -23399,7 +23877,7 @@ async function loadSkill(dir, opts = {}) {
   let manifest = null;
   let manifestProblem = null;
   try {
-    manifest = parseManifest(JSON.parse(await readFile3(join2(dir, MANIFEST_FILE), "utf8")));
+    manifest = parseManifest(JSON.parse(await readFile4(join2(dir, MANIFEST_FILE), "utf8")));
   } catch (e) {
     const err = e;
     manifestProblem = err.code === "ENOENT" ? `this skill has no ${MANIFEST_FILE}, so it declares no permissions` : e instanceof ManifestError ? e.message : `${MANIFEST_FILE} is not valid JSON: ${err.message}`;
@@ -23409,12 +23887,12 @@ async function loadSkill(dir, opts = {}) {
 }
 
 // src/author.ts
-var OWNER_ABI = [
+var OWNER_ABI2 = [
   { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] }
 ];
 async function ownerOf(ctx, target) {
   try {
-    return await ctx.reader.client.readContract({ address: target, abi: OWNER_ABI, functionName: "owner" });
+    return await ctx.reader.client.readContract({ address: target, abi: OWNER_ABI2, functionName: "owner" });
   } catch {
     return null;
   }
@@ -23424,17 +23902,18 @@ function skillDirArg(args) {
   if (!dir) throw new UsageError("missing <skill-dir>");
   return dir;
 }
-function redlineReasons(skill) {
+function redlineReasons(skill, soft = /* @__PURE__ */ new Set()) {
   const out = [];
   for (const r of skill.redline.results) {
     if (r.passed && r.findings.length === 0) continue;
     for (const finding of r.findings) {
       out.push({
-        level: finding.severity === "fail" ? "block" : "warn",
+        level: finding.severity === "fail" && !soft.has(r.rule) ? "block" : "warn",
         text: `${r.rule} ${finding.message} (${finding.file}:${finding.line})`
       });
     }
   }
+  for (const n of skill.redline.notes) if (n.startsWith("RL4")) out.push({ level: "info", text: n });
   return out;
 }
 async function cmdHash(args) {
@@ -23464,7 +23943,8 @@ async function cmdManifest(args) {
   };
 }
 async function cmdRedline(args) {
-  const skill = await loadSkill(skillDirArg(args), { checkerCommit: flag(args, "checker-commit") ?? null });
+  const checkerCommit = flag(args, "checker-commit") ?? null;
+  const skill = await withOwnerPowers(await loadSkill(skillDirArg(args), { checkerCommit }), args, { checkerCommit });
   const passed = allPassed(skill.redline);
   return {
     ok: true,
@@ -23477,7 +23957,8 @@ async function cmdRedline(args) {
 }
 async function cmdRegister(args) {
   const ctx = await loadContext(args);
-  const skill = await loadSkill(skillDirArg(args), { extraKnown: [ctx.deployment.skillRegistry, ctx.deployment.countersign] });
+  const extraKnown = [ctx.deployment.skillRegistry, ctx.deployment.countersign];
+  const skill = await withOwnerPowers(await loadSkill(skillDirArg(args), { extraKnown }), args, { reader: ctx.reader, chainId: ctx.chainId, extraKnown });
   const uri = flag(args, "uri");
   if (!uri) throw new UsageError("missing --uri <contentURI>, e.g. https://github.com/<owner>/<repo>/tree/<commit>/<path>");
   if (!skill.manifest) return { ok: false, command: "register", say: skill.manifestProblem ?? "no manifest" };
@@ -23537,9 +24018,12 @@ async function cmdRegister(args) {
   if (!m.onchain.targets.some((t) => (t.flags & FLAG_ANCHOR) !== 0)) {
     reasons.push({ level: "warn", text: "no anchor declared: countersigns cannot count until an author-owned contract is declared" });
   }
-  reasons.push(...redlineReasons(skill));
-  if (!allPassed(skill.redline) && !bool(args, "force")) {
+  reasons.push(...redlineReasons(skill, /* @__PURE__ */ new Set(["RL4"])));
+  const failing = skill.redline.results.filter((r) => !r.passed);
+  if (failing.some((r) => r.rule !== "RL4") && !bool(args, "force")) {
     reasons.push({ level: "block", text: "fix the Red-Line findings first (or pass --force to register anyway)" });
+  } else if (failing.some((r) => r.rule === "RL4")) {
+    reasons.push({ level: "warn", text: "RL4: disclose the owner powers in SKILL.md before you ask for a Red-Line attestation" });
   }
   const data = encodeRegister(skill.content.contentHash, uri, m.onchain);
   if (!reasons.some((r) => r.level === "block")) {
@@ -23609,7 +24093,7 @@ async function cmdEndorse(args) {
 }
 
 // src/user.ts
-import { mkdir, readFile as readFile4, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile as readFile5, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join as join3, resolve } from "node:path";
 
@@ -23703,7 +24187,8 @@ async function versionOf(ctx, skill) {
 }
 async function cmdCheckInstall(args) {
   const ctx = await loadContext(args);
-  const skill = await loadSkill(skillArg(args), { extraKnown: [ctx.deployment.skillRegistry, ctx.deployment.countersign] });
+  const extraKnown = [ctx.deployment.skillRegistry, ctx.deployment.countersign];
+  const skill = await withOwnerPowers(await loadSkill(skillArg(args), { extraKnown }), args, { reader: ctx.reader, chainId: ctx.chainId, extraKnown });
   const reasons = [];
   const m = skill.manifest;
   for (const r of skill.redline.results) {
@@ -23715,6 +24200,7 @@ async function cmdCheckInstall(args) {
   if (!skill.redline.results.some((r) => r.findings.some((f) => f.severity === "fail"))) {
     reasons.push({ level: "ok", text: "static Red-Line Check: no findings" });
   }
+  for (const n of skill.redline.notes) if (n.startsWith("RL4")) reasons.push({ level: "info", text: n });
   if (!m) {
     reasons.push({ level: "warn", text: `${skill.manifestProblem ?? "no countersign.json"}: COUNTERSIGN cannot check this skill's wallet calls` });
   }
@@ -23859,7 +24345,7 @@ async function readPreviewArg(args) {
   const text = p.trim().startsWith("{") ? p : p === "-" ? await new Promise((res) => {
     let s = "";
     process.stdin.on("data", (d) => s += d).on("end", () => res(s));
-  }) : await readFile4(p, "utf8");
+  }) : await readFile5(p, "utf8");
   return JSON.parse(text);
 }
 async function cmdCheckPreview(args) {
@@ -23933,7 +24419,7 @@ var stateDir = () => process.env.COUNTERSIGN_HOME ?? join3(homedir(), ".counters
 var sessionFile = () => join3(stateDir(), "session.json");
 async function loadSession() {
   try {
-    return JSON.parse(await readFile4(sessionFile(), "utf8"));
+    return JSON.parse(await readFile5(sessionFile(), "utf8"));
   } catch {
     return null;
   }

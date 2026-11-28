@@ -24,6 +24,7 @@ import {
 } from "@countersign/core";
 import { bool, flag, list, type Args } from "./args.js";
 import { addressArg, bawPreview, loadContext, UsageError, type Context } from "./context.js";
+import { withOwnerPowers } from "./ownerPowers.js";
 import { verdictOf, type Reason, type Result } from "./output.js";
 import { loadSkill, type LoadedSkill } from "./skill.js";
 import { versionStatus } from "./trust.js";
@@ -66,7 +67,8 @@ async function versionOf(ctx: Context, skill: LoadedSkill): Promise<{ versionId:
 /** countersign check-install <skill-dir> [--verify-local]: should the agent trust this skill version? */
 export async function cmdCheckInstall(args: Args): Promise<Result> {
   const ctx = await loadContext(args);
-  const skill = await loadSkill(skillArg(args), { extraKnown: [ctx.deployment.skillRegistry, ctx.deployment.countersign] });
+  const extraKnown = [ctx.deployment.skillRegistry, ctx.deployment.countersign];
+  const skill = await withOwnerPowers(await loadSkill(skillArg(args), { extraKnown }), args, { reader: ctx.reader, chainId: ctx.chainId, extraKnown });
   const reasons: Reason[] = [];
   const m = skill.manifest;
 
@@ -80,6 +82,7 @@ export async function cmdCheckInstall(args: Args): Promise<Result> {
   if (!skill.redline.results.some((r) => r.findings.some((f) => f.severity === "fail"))) {
     reasons.push({ level: "ok", text: "static Red-Line Check: no findings" });
   }
+  for (const n of skill.redline.notes) if (n.startsWith("RL4")) reasons.push({ level: "info", text: n });
 
   // 2. manifest and registration
   if (!m) {
